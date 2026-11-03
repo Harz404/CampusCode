@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+.pnp/
+.pnp.*
+
+# Production builds
+/client/dist/
+/server/dist/
+dist/
+build/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+server/.env
+
+# Allow env examples
+!server/.env.example
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.log
+
+# TypeScript
+*.tsbuildinfo
+
+# OS metadata
+.DS_Store
+Thumbs.db

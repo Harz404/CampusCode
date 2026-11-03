@@ -1,0 +1,254 @@
+@import "tailwindcss";
+
+/* ============================================================
+   CampusCode Design System
+   ============================================================ */
+
+@theme inline {
+  /* ── Colors ─────────────────────────────────────────── */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  /* Brand */
+  --color-brand-50: #eef2ff;
+  --color-brand-100: #e0e7ff;
+  --color-brand-200: #c7d2fe;
+  --color-brand-300: #a5b4fc;
+  --color-brand-400: #818cf8;
+  --color-brand-500: #6366f1;
+  --color-brand-600: #4f46e5;
+  --color-brand-700: #4338ca;
+  --color-brand-800: #3730a3;
+  --color-brand-900: #312e81;
+}
+
+:root {
+  --background: #ffffff;
+  --foreground: #0f172a;
+  --muted: #f1f5f9;
+  --muted-foreground: #64748b;
+  --border: #e2e8f0;
+  --card: #ffffff;
+  --card-foreground: #0f172a;
+  --popover: #ffffff;
+  --popover-foreground: #0f172a;
+  --primary: #4f46e5;
+  --primary-foreground: #ffffff;
+  --secondary: #f1f5f9;
+  --secondary-foreground: #0f172a;
+  --accent: #f1f5f9;
+  --accent-foreground: #0f172a;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --ring: #4f46e5;
+  --radius: 0.625rem;
+  --sidebar-bg: #fafbfc;
+  --sidebar-border: #e2e8f0;
+  --success: #10b981;
+  --warning: #f59e0b;
+}
+
+.dark {
+  --background: #0b0f1a;
+  --foreground: #f1f5f9;
+  --muted: #1e293b;
+  --muted-foreground: #94a3b8;
+  --border: #1e293b;
+  --card: #111827;
+  --card-foreground: #f1f5f9;
+  --popover: #111827;
+  --popover-foreground: #f1f5f9;
+  --primary: #6366f1;
+  --primary-foreground: #ffffff;
+  --secondary: #1e293b;
+  --secondary-foreground: #f1f5f9;
+  --accent: #1e293b;
+  --accent-foreground: #f1f5f9;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --ring: #6366f1;
+  --sidebar-bg: #0d1117;
+  --sidebar-border: #1e293b;
+  --success: #10b981;
+  --warning: #f59e0b;
+}
+
+/* ── Base ──────────────────────────────────────────────── */
+
+* {
+  border-color: var(--border);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Scrollbar ─────────────────────────────────────────── */
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--muted-foreground);
+  border-radius: 3px;
+  opacity: 0.3;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  opacity: 0.5;
+}
+
+/* ── Animations ────────────────────────────────────────── */
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(16px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.4s ease-out;
+}
+
+.animate-slide-in {
+  animation: slideInRight 0.3s ease-out;
+}
+
+.animate-scale-in {
+  animation: scaleIn 0.2s ease-out;
+}
+
+/* ── Utility Classes ───────────────────────────────────── */
+
+.glass {
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.dark .glass {
+  background: rgba(17, 24, 39, 0.8);
+}
+
+.gradient-text {
+  background: linear-gradient(135deg, #4f46e5, #7c3aed, #06b6d4);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.card-hover {
+  transition: all 0.2s ease;
+}
+
+.card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px -5px rgba(0, 0, 0, 0.1), 0 4px 10px -6px rgba(0, 0, 0, 0.1);
+}
+
+.dark .card-hover:hover {
+  box-shadow: 0 8px 25px -5px rgba(0, 0, 0, 0.3);
+}
+
+/* ── Kanban ─────────────────────────────────────────────── */
+
+.kanban-column {
+  min-height: 200px;
+}
+
+.kanban-card {
+  cursor: grab;
+  transition: all 0.15s ease;
+}
+
+.kanban-card:active {
+  cursor: grabbing;
+  transform: rotate(2deg);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.15);
+}
+
+/* ── Chat ──────────────────────────────────────────────── */
+
+.chat-bubble-sent {
+  background: var(--primary);
+  color: var(--primary-foreground);
+  border-radius: 1rem 1rem 0.25rem 1rem;
+}
+
+.chat-bubble-received {
+  background: var(--muted);
+  color: var(--foreground);
+  border-radius: 1rem 1rem 1rem 0.25rem;
+}
+
+/* ── Selection ─────────────────────────────────────────── */
+
+::selection {
+  background: rgba(99, 102, 241, 0.2);
+  color: inherit;
+}
+
+/* ── Systemwide Select & Dropdown Styling ──────────────── */
+
+select {
+  background-color: var(--card);
+  color: var(--foreground);
+  border-color: var(--border);
+  color-scheme: light dark;
+}
+
+.dark select {
+  background-color: #111827;
+  color: #f1f5f9;
+  color-scheme: dark;
+}
+
+select option {
+  background-color: var(--card);
+  color: var(--foreground);
+  padding: 8px 12px;
+}
+
+.dark select option {
+  background-color: #111827;
+  color: #f1f5f9;
+}
+
+select option:checked,
+select option:hover {
+  background-color: var(--primary) !important;
+  color: #ffffff !important;
+}
+
+.custom-select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  background-size: 1rem 1rem;
+  padding-right: 2.25rem;
+}
+
