@@ -4,6 +4,7 @@ export interface IConversation extends Document {
   id: string;
   projectId?: mongoose.Types.ObjectId;
   participants: mongoose.Types.ObjectId[];
+  directKey?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -12,6 +13,7 @@ const ConversationSchema = new Schema<IConversation>(
   {
     projectId: { type: Schema.Types.ObjectId, ref: "Project" },
     participants: [{ type: Schema.Types.ObjectId, ref: "User", required: true }],
+    directKey: { type: String, unique: true, sparse: true },
   },
   {
     timestamps: true,

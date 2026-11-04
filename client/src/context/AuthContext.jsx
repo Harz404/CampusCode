@@ -1,3 +1,4 @@
+import { apiFetch, apiJson } from "@/lib/api";
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 const AuthContext = createContext({
     user: null,
@@ -6,7 +7,8 @@ const AuthContext = createContext({
     isLoading: true,
     login: async () => ({ success: false }),
     register: async () => ({ success: false }),
-    demoLogin: async () => ({ success: false }),
+    changePassword: async () => ({ success: false }),
+    logoutEverywhere: async () => ({ success: false }),
     logout: () => { },
     updateProfile: async () => ({ success: false }),
 });
@@ -23,17 +25,18 @@ export function AuthProvider({ children }) {
                 return;
             }
             try {
-                const res = await fetch("/api/auth/profile", {
+                const res = await apiFetch("/api/auth/profile", {
                     headers: {
                         Authorization: `Bearer ${storedToken}`,
                     },
                 });
                 if (res.ok) {
                     const userData = await res.json();
+                    if (localStorage.getItem("campuscode_jwt") !== storedToken) return;
                     setUser(userData);
                     setToken(storedToken);
                 }
-                else {
+                else if (res.status === 401 && localStorage.getItem("campuscode_jwt") === storedToken) {
                     // Token invalid or expired
                     localStorage.removeItem("campuscode_jwt");
                     setToken(null);
@@ -51,7 +54,7 @@ export function AuthProvider({ children }) {
     }, []);
     const login = useCallback(async (email, password) => {
         try {
-            const res = await fetch("/api/auth/login", {
+            const res = await apiFetch("/api/auth/login", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
@@ -72,7 +75,7 @@ export function AuthProvider({ children }) {
     }, []);
     const register = useCallback(async (formData) => {
         try {
-            const res = await fetch("/api/auth/register", {
+            const res = await apiFetch("/api/auth/register", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(formData),
@@ -91,37 +94,45 @@ export function AuthProvider({ children }) {
             return { success: false, error: "Network error during registration" };
         }
     }, []);
-    const demoLogin = useCallback(async (role = "student") => {
+    const [sessionError, setSessionError] = useState("");
+    const clearSession = useCallback(() => {
+        localStorage.removeItem("campuscode_jwt"); setToken(null); setUser(null);
+    }, []);
+    useEffect(() => {
+        const expired = event => {
+            if (event.detail === localStorage.getItem("campuscode_jwt")) clearSession();
+        };
+        const changed = event => {
+            if (event.key === "campuscode_jwt") { setToken(null); setUser(null); }
+        };
+        window.addEventListener("campuscode:session-expired", expired);
+        window.addEventListener("storage", changed);
+        return () => { window.removeEventListener("campuscode:session-expired", expired); window.removeEventListener("storage", changed); };
+    }, [clearSession]);
+    const revokeSession = useCallback(async (everywhere = false) => {
+        const savedToken = localStorage.getItem("campuscode_jwt");
+        if (!savedToken) { clearSession(); return { success: true }; }
+        setSessionError("");
         try {
-            const res = await fetch("/api/auth/demo-login", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ role }),
-            });
-            const data = await res.json();
-            if (!res.ok) {
-                return { success: false, error: data.error || "Demo login failed" };
-            }
-            localStorage.setItem("campuscode_jwt", data.token);
-            setToken(data.token);
-            setUser(data.user);
+            const res = await apiFetch(everywhere ? "/api/auth/logout-all" : "/api/auth/logout", { method: "POST", headers: { Authorization: `Bearer ${savedToken}` } });
+            if (!res.ok && res.status !== 401) throw new Error("Could not sign out securely. Please check your connection and try again.");
+            if (savedToken === localStorage.getItem("campuscode_jwt")) clearSession();
             return { success: true };
-        }
-        catch (error) {
-            console.error("[Auth] Demo login error:", error);
-            return { success: false, error: "Network error during demo login" };
-        }
-    }, []);
-    const logout = useCallback(() => {
-        localStorage.removeItem("campuscode_jwt");
-        setToken(null);
-        setUser(null);
-    }, []);
+        } catch (error) { setSessionError(error.message); return { success: false, error: error.message }; }
+    }, [clearSession]);
+    const logout = useCallback(() => revokeSession(false), [revokeSession]);
+    const logoutEverywhere = useCallback(() => revokeSession(true), [revokeSession]);
+    const changePassword = useCallback(async (currentPassword, newPassword) => {
+        try {
+            await apiJson("/api/auth/change-password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ currentPassword, newPassword }) });
+            clearSession(); return { success: true };
+        } catch (error) { return { success: false, error: error.message }; }
+    }, [clearSession]);
     const updateProfile = useCallback(async (updates) => {
         if (!token)
             return { success: false, error: "Not authenticated" };
         try {
-            const res = await fetch("/api/auth/profile", {
+            const res = await apiFetch("/api/auth/profile", {
                 method: "PATCH",
                 headers: {
                     "Content-Type": "application/json",
@@ -149,10 +160,12 @@ export function AuthProvider({ children }) {
             isLoading,
             login,
             register,
-            demoLogin,
+            changePassword,
+            logoutEverywhere,
             logout,
             updateProfile,
         }}>
+      {sessionError && <div role="alert" className="fixed top-0 inset-x-0 z-[100] bg-[var(--card)] border-b border-red-500 p-3 text-red-500 text-sm">{sessionError}<button onClick={() => setSessionError("")} className="ml-3 underline">Dismiss</button></div>}
       {children}
     </AuthContext.Provider>);
 }

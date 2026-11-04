@@ -1,3 +1,6 @@
+import MyPurchasesPage from "./pages/dashboard/MyPurchasesPage";
+import MyProductsPage from "./pages/dashboard/MyProductsPage";
+import { ProtectedRoute } from "@/components/providers/ProtectedRoute";
 import { Routes, Route, Navigate } from "react-router-dom";
 import DashboardLayout from "./components/layout/DashboardLayout";
 // Public Pages
@@ -51,10 +54,13 @@ export default function App() {
       <Route path="/terms" element={<TermsPage />}/>
 
       {/* Dashboard & Workspace Routes with DashboardLayout */}
+      <Route element={<ProtectedRoute />}>
       <Route element={<DashboardLayout />}>
         <Route path="/dashboard" element={<DashboardPage />}/>
         <Route path="/marketplace" element={<MarketplacePage />}/>
         <Route path="/marketplace/:id" element={<MarketplaceDetailPage />}/>
+        <Route path="/purchases" element={<MyPurchasesPage />}/>
+        <Route path="/my-products" element={<MyProductsPage />}/>
         <Route path="/sell" element={<SellPage />}/>
         <Route path="/solutions" element={<SolutionsPage />}/>
         <Route path="/solutions/post" element={<SolutionPostPage />}/>
@@ -80,6 +86,7 @@ export default function App() {
         <Route path="/admin/users" element={<AdminUsersPage />}/>
       </Route>
 
+      </Route>
       {/* Fallback */}
       <Route path="*" element={<Navigate to="/" replace/>}/>
     </Routes>);

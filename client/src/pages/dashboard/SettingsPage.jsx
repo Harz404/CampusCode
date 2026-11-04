@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { PasswordSecurity } from "@/components/shared/PasswordSecurity";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { User, Bell, Shield, Palette, CreditCard, Save, Check, } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
@@ -24,24 +25,24 @@ export default function SettingsPage() {
     const [github, setGithub] = useState(user?.studentProfile?.github || "");
     const [linkedin, setLinkedin] = useState(user?.studentProfile?.linkedin || "");
     const [savedSuccess, setSavedSuccess] = useState(false);
+    const [saveError, setSaveError] = useState("");
+    useEffect(() => {
+        setName(user?.name || ""); setEmail(user?.email || "");
+        setBio(user?.studentProfile?.bio || ""); setCollege(user?.studentProfile?.college || "");
+        setDegree(user?.studentProfile?.degree || ""); setGithub(user?.studentProfile?.github || "");
+        setLinkedin(user?.studentProfile?.linkedin || "");
+    }, [user]);
     const handleSave = async (e) => {
         e.preventDefault();
-        if (updateProfile) {
-            await updateProfile({
-                name,
-                studentProfile: {
-                    bio,
-                    college,
-                    degree,
-                    github,
-                    linkedin,
-                },
-            });
-        }
+        setSavedSuccess(false);
+        setSaveError("");
+        const result = await updateProfile({ name, bio, college, degree, github, linkedin });
+        if (!result.success) { setSaveError(result.error || "Could not save your profile"); return; }
         setSavedSuccess(true);
         setTimeout(() => setSavedSuccess(false), 3000);
     };
     return (<div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto">
+      {saveError && <p role="alert" className="text-red-500 mb-4">{saveError}</p>}
       <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}>
         <h1 className="text-2xl font-bold mb-6">Account Settings</h1>
       </motion.div>
@@ -146,22 +147,7 @@ export default function SettingsPage() {
               </Card>
             </motion.div>)}
 
-          {activeTab === "security" && (<motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-              <Card>
-                <CardHeader><CardTitle>Password & Security</CardTitle></CardHeader>
-                <CardContent className="space-y-4">
-                  <div>
-                    <Label className="mb-1.5 block">Current Password</Label>
-                    <Input type="password" placeholder="••••••••"/>
-                  </div>
-                  <div>
-                    <Label className="mb-1.5 block">New Password</Label>
-                    <Input type="password" placeholder="••••••••"/>
-                  </div>
-                  <Button>Update Password</Button>
-                </CardContent>
-              </Card>
-            </motion.div>)}
+          {activeTab === "security" && <PasswordSecurity />}
 
           {activeTab === "billing" && (<motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
               <Card>

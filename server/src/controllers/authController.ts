@@ -1,51 +1,43 @@
 import { Response } from "express";
 import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
+import { issueSession, validateNewPassword } from "../services/sessionService.js";
+import { Session } from "../models/Session.js";
 import { User, IUser } from "../models/User.js";
 import { AuthRequest } from "../middleware/auth.js";
-
-const JWT_SECRET = process.env.JWT_SECRET || "campuscode_super_secret_jwt_key_2026_dev_prod";
-
-function generateToken(user: IUser) {
-  return jwt.sign(
-    {
-      id: user.id || user._id.toString(),
-      email: user.email,
-      name: user.name,
-      role: user.role,
-    },
-    JWT_SECRET,
-    { expiresIn: "30d" }
-  );
-}
 
 export async function register(req: AuthRequest, res: Response) {
   try {
     const { name, email, password, role, college, degree, graduationYear, skills, bio, organization, website, description } = req.body;
 
-    if (!name || !email || !password) {
+    if (role !== undefined && role !== "student" && role !== "client") {
+      return res.status(400).json({ error: "Registration role must be student or client" });
+    }
+
+    if (typeof name !== "string" || !name.trim() || typeof email !== "string" || !email.trim() || typeof password !== "string") {
       return res.status(400).json({ error: "Name, email, and password are required" });
     }
 
-    if (password.length < 6) {
-      return res.status(400).json({ error: "Password must be at least 6 characters" });
-    }
+    try { validateNewPassword(password); }
+    catch (error) { return res.status(400).json({ error: (error as Error).message }); }
 
     const cleanEmail = email.toLowerCase().trim();
+    if (cleanEmail.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      return res.status(400).json({ error: "Enter a valid email address" });
+    }
     const existing = await User.findOne({ email: cleanEmail });
     if (existing) {
       return res.status(409).json({ error: "An account with this email already exists" });
     }
 
     const hashedPassword = await bcrypt.hash(password, 12);
-    const userRole = role === "client" ? "client" : role === "admin" ? "admin" : "student";
+    const userRole = role === "client" ? "client" : "student";
 
     const newUser = new User({
       name: name.trim(),
       email: cleanEmail,
       password: hashedPassword,
       role: userRole,
-      isVerified: true,
+      isVerified: false,
       studentProfile:
         userRole === "student"
           ? {
@@ -80,7 +72,7 @@ export async function register(req: AuthRequest, res: Response) {
     });
 
     await newUser.save();
-    const token = generateToken(newUser);
+    const token = await issueSession(newUser);
 
     return res.status(201).json({
       token,
@@ -96,7 +88,7 @@ export async function register(req: AuthRequest, res: Response) {
 export async function login(req: AuthRequest, res: Response) {
   try {
     const { email, password } = req.body;
-    if (!email || !password) {
+    if (typeof email !== "string" || typeof password !== "string" || !email.trim() || !password) {
       return res.status(400).json({ error: "Email and password are required" });
     }
 
@@ -111,7 +103,7 @@ export async function login(req: AuthRequest, res: Response) {
       return res.status(401).json({ error: "Invalid email or password" });
     }
 
-    const token = generateToken(user);
+    const token = await issueSession(user);
     return res.json({
       token,
       user: user.toJSON(),
@@ -209,60 +201,35 @@ export async function updateProfile(req: AuthRequest, res: Response) {
 }
 
 export async function demoLogin(req: AuthRequest, res: Response) {
-  try {
-    const role = (req.body.role || "student").toLowerCase();
-    let email = "student@campuscode.dev";
-    if (role === "client") email = "client@campuscode.dev";
-    if (role === "admin") email = "admin@campuscode.dev";
-
-    let user = await User.findOne({ email });
-    if (!user) {
-      // Auto-create demo user if not found
-      user = new User({
-        name: role === "client" ? "Apex Solutions" : role === "admin" ? "CampusCode Admin" : "Alex Rivera",
-        email,
-        password: await bcrypt.hash("demo123456", 10),
-        role: role as "student" | "client" | "admin",
-        isVerified: true,
-        studentProfile: role === "student" ? {
-          college: "Stanford University",
-          degree: "B.S. Computer Science",
-          graduationYear: 2026,
-          skills: ["React", "TypeScript", "Node.js", "Python", "MongoDB"],
-          bio: "Full-stack developer passionate about building performant apps.",
-          level: "builder",
-          badges: [],
-          rating: 4.9,
-          reviewCount: 14,
-          totalSales: 8,
-          totalEarnings: 32000,
-          completedProjects: 7,
-          portfolioUrl: "https://github.com",
-        } : undefined,
-        clientProfile: role === "client" ? {
-          organization: "Apex Innovations",
-          website: "https://apex.dev",
-          description: "Building next-gen enterprise tools.",
-          profileType: "startup",
-          isVerified: true,
-          rating: 5.0,
-          reviewCount: 6,
-          totalSpent: 45000,
-          projectsPosted: 4,
-        } : undefined,
-      });
-      await user.save();
-    }
-
-    const token = generateToken(user);
-    return res.json({
-      token,
-      user: user.toJSON(),
-      message: `Demo login as ${role} successful`,
-    });
-  } catch (error) {
-    console.error("[Auth Demo Login Error]:", error);
-    return res.status(500).json({ error: "Demo login failed" });
-  }
+  return res.status(404).json({ error: "Demo login is disabled" });
 }
 
+
+export async function logout(req: AuthRequest, res: Response) {
+  try {
+    await Session.updateOne({ _id: req.sessionId, userId: req.user!.id }, { $set: { revokedAt: new Date() } });
+    return res.json({ success: true });
+  } catch { return res.status(503).json({ error: "Could not revoke session; please retry" }); }
+}
+
+export async function logoutAll(req: AuthRequest, res: Response) {
+  try {
+    await User.updateOne({ _id: req.user!.id }, { $inc: { authVersion: 1 } });
+    return res.json({ success: true });
+  } catch { return res.status(503).json({ error: "Could not revoke sessions; please retry" }); }
+}
+
+export async function changePassword(req: AuthRequest, res: Response) {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    try { validateNewPassword(newPassword); } catch (error) { return res.status(400).json({ error: (error as Error).message }); }
+    if (typeof currentPassword !== "string" || !currentPassword) return res.status(400).json({ error: "Enter your current password" });
+    const user = await User.findById(req.user!.id);
+    if (!user?.password || !await bcrypt.compare(currentPassword, user.password)) return res.status(403).json({ error: "Current password is incorrect" });
+    if (currentPassword === newPassword) return res.status(400).json({ error: "Choose a different new password" });
+    const hash = await bcrypt.hash(newPassword, 12);
+    const updated = await User.updateOne({ _id: user._id, password: user.password }, { $set: { password: hash }, $inc: { authVersion: 1 } });
+    if (!updated.matchedCount) return res.status(409).json({ error: "Your password changed in another request. Sign in again." });
+    return res.json({ success: true, message: "Password updated. Sign in again on all devices." });
+  } catch { return res.status(503).json({ error: "Could not update password; please retry" }); }
+}

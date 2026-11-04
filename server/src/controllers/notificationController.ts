@@ -20,7 +20,8 @@ export async function getNotifications(req: AuthRequest, res: Response) {
 export async function markRead(req: AuthRequest, res: Response) {
   try {
     const { id } = req.params;
-    await Notification.findByIdAndUpdate(id, { isRead: true });
+    const notification = await Notification.findOneAndUpdate({ _id: id, userId: req.user!.id }, { isRead: true });
+    if (!notification) return res.status(404).json({ error: "Notification not found" });
     return res.json({ success: true });
   } catch (error) {
     return res.status(500).json({ error: "Failed to mark notification read" });

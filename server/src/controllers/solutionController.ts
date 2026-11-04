@@ -1,3 +1,6 @@
+import { requirementInput, RequirementError } from "../services/requirementService.js";
+import { serializeProposal } from "./proposalController.js";
+import { sameId } from "../middleware/access.js";
 import { Response } from "express";
 import { SolutionRequest } from "../models/SolutionRequest.js";
 import { Proposal } from "../models/Proposal.js";
@@ -32,7 +35,7 @@ export async function getSolutionRequests(req: AuthRequest, res: Response) {
 
     const requests = await SolutionRequest.find(filter)
       .sort(sortOption)
-      .populate("clientId", "name email avatar clientProfile");
+      .populate("clientId", "name avatar clientProfile");
 
     const formatted = requests.map((r) => {
       const rJson: any = r.toJSON();
@@ -57,19 +60,19 @@ export async function getSolutionRequestById(req: AuthRequest, res: Response) {
       return res.status(404).json({ error: "Solution request not found" });
     }
 
-    const request = await SolutionRequest.findById(id).populate("clientId", "name email avatar clientProfile");
+    const request = await SolutionRequest.findById(id).populate("clientId", "name avatar clientProfile");
     if (!request) {
       return res.status(404).json({ error: "Solution request not found" });
     }
 
-    const proposals = await Proposal.find({ solutionRequestId: request._id }).populate("studentId", "name email avatar studentProfile");
+    const proposals = req.user ? await Proposal.find({ solutionRequestId: request._id, ...(sameId(request.clientId, req.user.id) ? {} : { studentId: req.user.id }) }).populate("studentId", "name avatar studentProfile") : [];
 
     const rJson: any = request.toJSON();
     if (rJson.clientId && typeof rJson.clientId === "object") {
       rJson.client = rJson.clientId;
       rJson.clientId = (rJson.client as { id?: string }).id || rJson.clientId;
     }
-    rJson.proposals = proposals.map((p) => p.toJSON());
+    rJson.proposals = proposals.map(serializeProposal);
 
     return res.json(rJson);
   } catch (error) {
@@ -85,48 +88,14 @@ export async function createSolutionRequest(req: AuthRequest, res: Response) {
       return res.status(401).json({ error: "Unauthorized: Client ID required" });
     }
 
-    const {
-      title,
-      description,
-      problemStatement,
-      category,
-      solutionType,
-      difficulty,
-      budgetMin,
-      budgetMax,
-      isFixedPrice,
-      deadline,
-      preferredTechnologies,
-      requiredFeatures,
-      expectedDeliverables,
-    } = req.body;
-
-    if (!title || !description || !category) {
-      return res.status(400).json({ error: "Title, description, and category are required" });
-    }
-
-    const newRequest = new SolutionRequest({
-      title: title.trim(),
-      description,
-      problemStatement: problemStatement || description,
-      category: category.toLowerCase(),
-      solutionType: solutionType || "web",
-      difficulty: difficulty || "intermediate",
-      status: "open",
-      clientId,
-      budgetMin: Number(budgetMin) || 10000,
-      budgetMax: Number(budgetMax) || 25000,
-      isFixedPrice: isFixedPrice ?? true,
-      deadline: deadline ? new Date(deadline) : undefined,
-      preferredTechnologies: Array.isArray(preferredTechnologies) ? preferredTechnologies : [],
-      requiredFeatures: Array.isArray(requiredFeatures) ? requiredFeatures : [],
-      expectedDeliverables: Array.isArray(expectedDeliverables) ? expectedDeliverables : [],
-      proposalCount: 0,
-    });
+    if (req.user?.role !== "client") return res.status(403).json({ error: "Only clients can post requirements" });
+    const fields = requirementInput(req.body, true);
+    const newRequest = new SolutionRequest({ ...fields, clientId, status: "open", proposalCount: 0 });
 
     await newRequest.save();
     return res.status(201).json(newRequest.toJSON());
   } catch (error) {
+    if (error instanceof RequirementError) return res.status(error.status).json({ error: error.message });
     console.error("[Solution Create Error]:", error);
     return res.status(500).json({ error: "Failed to create solution request" });
   }
@@ -135,12 +104,14 @@ export async function createSolutionRequest(req: AuthRequest, res: Response) {
 export async function updateSolutionRequest(req: AuthRequest, res: Response) {
   try {
     const { id } = req.params;
-    const request = await SolutionRequest.findByIdAndUpdate(id, { $set: req.body }, { new: true });
+    const fields = requirementInput(req.body);
+    const request = await SolutionRequest.findOneAndUpdate({ _id: id, clientId: req.user!.id, status: "open", proposalCount: 0 }, { $set: fields }, { new: true, runValidators: true });
     if (!request) {
       return res.status(404).json({ error: "Solution request not found" });
     }
     return res.json(request.toJSON());
   } catch (error) {
+    if (error instanceof RequirementError) return res.status(error.status).json({ error: error.message });
     console.error("[Solution Update Error]:", error);
     return res.status(500).json({ error: "Failed to update solution request" });
   }
@@ -149,8 +120,9 @@ export async function updateSolutionRequest(req: AuthRequest, res: Response) {
 export async function deleteSolutionRequest(req: AuthRequest, res: Response) {
   try {
     const { id } = req.params;
-    await SolutionRequest.findByIdAndDelete(id);
-    return res.json({ success: true, message: "Solution request deleted" });
+    const closed = await SolutionRequest.findOneAndUpdate({ _id: id, clientId: req.user!.id, status: "open" }, { $set: { status: "closed" } });
+    if (!closed) return res.status(409).json({ error: "Only open requirements can be closed" });
+    return res.json({ success: true, message: "Requirement closed" });
   } catch (error) {
     console.error("[Solution Delete Error]:", error);
     return res.status(500).json({ error: "Failed to delete solution request" });

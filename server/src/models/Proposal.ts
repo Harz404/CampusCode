@@ -11,6 +11,7 @@ export interface IProposal extends Document {
   id: string;
   solutionRequestId: mongoose.Types.ObjectId;
   studentId: mongoose.Types.ObjectId;
+  submissionKey?: string;
   content: string;
   price: number;
   estimatedDelivery: number;
@@ -25,6 +26,7 @@ const ProposalSchema = new Schema<IProposal>(
   {
     solutionRequestId: { type: Schema.Types.ObjectId, ref: "SolutionRequest", required: true },
     studentId: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    submissionKey: { type: String, unique: true, sparse: true },
     content: { type: String, required: true },
     price: { type: Number, required: true },
     estimatedDelivery: { type: Number, required: true },

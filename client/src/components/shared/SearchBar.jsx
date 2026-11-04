@@ -1,3 +1,4 @@
+import { apiFetch } from "@/lib/api";
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
@@ -29,8 +30,8 @@ export function SearchBar({ isOpen, onClose }) {
         const timer = setTimeout(async () => {
             try {
                 const [prodRes, solRes] = await Promise.all([
-                    fetch(`/api/products?search=${encodeURIComponent(query.trim())}`).then((r) => r.ok ? r.json() : { products: [] }),
-                    fetch(`/api/solutions?search=${encodeURIComponent(query.trim())}`).then((r) => r.ok ? r.json() : { requests: [] }),
+                    apiFetch(`/api/products?search=${encodeURIComponent(query.trim())}`).then((r) => r.ok ? r.json() : { products: [] }),
+                    apiFetch(`/api/solutions?search=${encodeURIComponent(query.trim())}`).then((r) => r.ok ? r.json() : { requests: [] }),
                 ]);
                 if (!cancelled) {
                     const combined = [

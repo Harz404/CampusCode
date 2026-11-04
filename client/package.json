@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "node scripts/build.mjs --watch",
-    "build": "node scripts/build.mjs"
+    "build": "node scripts/build.mjs",
+    "test": "node --test"
   },
   "dependencies": {
     "class-variance-authority": "^0.7.1",

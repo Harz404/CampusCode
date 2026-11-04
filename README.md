@@ -2,7 +2,7 @@
 
 **Build. Manage. Sell. Earn.**
 
-A production-quality student-focused software marketplace and project-management platform built on a pure **MERN Stack** (MongoDB, Express.js, React SPA, Node.js). CampusCode connects student developers with individuals and organizations that need software solutions.
+A college-project student-focused software marketplace and project-management platform built on a pure **MERN Stack** (MongoDB, Express.js, React SPA, Node.js). CampusCode connects student developers with individuals and organizations that need software solutions.
 
 ---
 
@@ -15,7 +15,7 @@ A production-quality student-focused software marketplace and project-management
 | **Backend** | Node.js, Express.js, TypeScript (ESM) |
 | **Database** | MongoDB with Mongoose ODM (MongoDB Atlas) |
 | **Authentication** | JWT (JSON Web Tokens) with bcryptjs password hashing |
-| **Payments** | Razorpay-ready integration / simulated wallet transactions |
+| **Payments** | Explicit demo checkout, purchase history and simulated wallet |
 | **AI Services** | Gemini / OpenAI integration endpoints (mock-ready fallback) |
 
 ---
@@ -95,6 +95,12 @@ Set `NODE_ENV=production` in the deployment environment. Deploy both `server/dis
 
 After building both directories, verify frontend serving from `server` with `node --test tests/client.test.mjs`.
 
+Run `npm test` in `server` for the server build and test suite, and `npm test` in `client` for frontend helper tests. The server suite opens an ephemeral local HTTP port for its serving check. Most business tests use isolated model stubs; they do not prove real MongoDB transaction concurrency or browser flows.
+
+Run `npm run test:integration` in `server` to verify real transaction rollback, concurrent acceptances/approvals/reviews, and conversation/message uniqueness against a disposable local MongoDB replica set. This command never uses `MONGODB_URI` or the project database. The first run downloads a MongoDB test binary into the ignored `server/node_modules/.cache` directory and needs internet access; later runs reuse that binary. The database is stopped and its temporary data removed after the suite. This uses the [MongoMemoryReplSet test utility](https://typegoose.github.io/mongodb-memory-server/docs/api/classes/mongo-memory-replset/).
+
+Authentication now requires stored server sessions. After updating from older builds, sign in again: older tokens have no revocable session record and are refused. Settings supports changing your password and signing out every device. Password changes revoke all existing sessions.
+
 ---
 
 ## 🗄 Database Management
@@ -110,3 +116,11 @@ npm run seed
 # Clear all data from MongoDB
 npm run clear
 ```
+
+## College demonstration payments
+
+Marketplace checkout is a simulation. It never charges money or asks for card, UPI, or bank details. Choose success, failure, or cancellation in checkout. Successful orders appear in Purchases with their saved delivery links and demo license reference. Failed/cancelled attempts grant no delivery access or seller credit.
+
+Seller Demo Earnings shows saved sale credits after a 10% simulated fee, an available demo balance, and simulated payouts. Prices are read from the product on the server; repeated checkout/payout requests cannot credit or debit the same operation twice. Existing unmarked legacy payment records are excluded from this demo ledger. Contract milestone management remains separate from marketplace demo payments; contract funding/release is not implemented.
+
+MongoDB must support transactions (Atlas or a local replica set). No payment-provider credentials are required. Run the integration suite to verify duplicate checkout, failed access, purchase snapshots, and concurrent payouts using a disposable database.

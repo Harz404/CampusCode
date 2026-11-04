@@ -1,3 +1,4 @@
+import { apiFetch } from "@/lib/api";
 import { useState, useEffect } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { motion } from "framer-motion";
@@ -33,7 +34,7 @@ export default function PortfolioPage() {
         }
         async function fetchProfile() {
             try {
-                const res = await fetch(`/api/users/${encodeURIComponent(activeSlug)}`);
+                const res = await apiFetch(`/api/users/${encodeURIComponent(activeSlug)}`);
                 if (res.ok) {
                     const data = await res.json();
                     if (!cancelled && data) {
@@ -60,7 +61,7 @@ export default function PortfolioPage() {
     const handleStartMessage = async (targetId) => {
         setMessagingLoading(true);
         try {
-            const res = await fetch("/api/messages/conversations", {
+            const res = await apiFetch("/api/messages/conversations", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ participantId: targetId }),

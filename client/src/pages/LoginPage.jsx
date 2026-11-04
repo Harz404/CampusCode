@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Code2, Mail, Lock, Eye, EyeOff, ArrowRight, AlertCircle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/useAuth";
 export function LoginPage() {
     const navigate = useNavigate();
+    const location = useLocation();
     const { login, isLoading } = useAuth();
     const [showPassword, setShowPassword] = useState(false);
     const [email, setEmail] = useState("");
@@ -22,7 +23,7 @@ export function LoginPage() {
         const result = await login(email, password);
         setIsSubmitting(false);
         if (result.success) {
-            navigate("/dashboard");
+            navigate(typeof location.state?.from === "string" && location.state.from.startsWith("/") && !location.state.from.startsWith("//") ? location.state.from : "/dashboard");
         }
         else {
             setError(result.error || "Invalid email or password");
@@ -46,6 +47,7 @@ export function LoginPage() {
             Sign in to access your projects, dashboard, and developer marketplace.
           </p>
 
+          {location.state?.notice && <p role="status" className="text-sm mb-4">{location.state.notice}</p>}
           {/* Error Banner */}
           {error && (<motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} className="flex items-center gap-2 p-3 mb-4 rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 text-sm">
               <AlertCircle className="h-4 w-4 shrink-0"/>

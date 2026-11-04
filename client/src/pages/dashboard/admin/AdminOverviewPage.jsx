@@ -1,3 +1,4 @@
+import { apiFetch } from "@/lib/api";
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
@@ -28,7 +29,7 @@ export default function AdminOverviewPage() {
         activeContracts: 0,
     });
     useEffect(() => {
-        fetch("/api/admin/stats")
+        apiFetch("/api/admin/stats")
             .then((res) => (res.ok ? res.json() : null))
             .then((data) => {
             if (data && data.stats) {
@@ -36,7 +37,7 @@ export default function AdminOverviewPage() {
             }
         })
             .catch(() => { });
-        fetch("/api/admin/users")
+        apiFetch("/api/admin/users")
             .then((res) => (res.ok ? res.json() : null))
             .then((data) => {
             if (data && data.users) {
@@ -44,7 +45,7 @@ export default function AdminOverviewPage() {
             }
         })
             .catch(() => { });
-        fetch("/api/products")
+        apiFetch("/api/products")
             .then((res) => (res.ok ? res.json() : null))
             .then((data) => {
             if (data && data.products) {

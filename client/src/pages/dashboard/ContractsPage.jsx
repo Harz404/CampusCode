@@ -17,7 +17,7 @@ export default function ContractsPage() {
           <h1 className="text-2xl font-bold mb-1">Active Contracts</h1>
           <p className="text-[var(--muted-foreground)]">
             {isClient
-            ? "Track student developer contracts, milestone deliverables, and payments"
+            ? "Track student developer contracts, milestone deliverables, and approvals"
             : "Manage client contracts, milestone deliverables, and payments"}
           </p>
         </div>
@@ -56,7 +56,7 @@ export default function ContractsPage() {
 
                         <div className="flex items-center gap-6 text-sm text-[var(--muted-foreground)] flex-wrap">
                           <span>Total Budget: <strong className="text-[var(--foreground)]">{formatCurrency(contract.totalAmount)}</strong></span>
-                          {!isClient && (<span>Your Payout: <strong className="text-emerald-600 dark:text-emerald-400">{formatCurrency(contract.studentEarnings)}</strong></span>)}
+                          {!isClient && (<span>Agreed Net Value: <strong className="text-emerald-600 dark:text-emerald-400">{formatCurrency(contract.studentEarnings)}</strong></span>)}
                           <span>Started: {formatDate(contract.startDate)}</span>
                           {contract.milestones && contract.milestones.length > 0 && (<span>Milestones: {contract.milestones.filter((m) => m.status === "approved").length} / {contract.milestones.length} approved</span>)}
                         </div>

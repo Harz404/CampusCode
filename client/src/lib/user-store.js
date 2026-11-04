@@ -1,3 +1,4 @@
+import { apiFetch } from "@/lib/api";
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/hooks/useAuth";
 export function useUserData() {
@@ -8,9 +9,13 @@ export function useUserData() {
     const [proposals, setProposals] = useState([]);
     const [contracts, setContracts] = useState([]);
     const [notifications, setNotifications] = useState([]);
+    const [demoEarnings, setDemoEarnings] = useState(0);
+    const [demoSpent, setDemoSpent] = useState(0);
+    const [paymentMonthly, setPaymentMonthly] = useState([]);
     const [isLoaded, setIsLoaded] = useState(false);
     useEffect(() => {
         if (!isAuthenticated || !userId) {
+            setDemoEarnings(0); setDemoSpent(0); setPaymentMonthly([]);
             setProjects([]);
             setProducts([]);
             setProposals([]);
@@ -25,14 +30,17 @@ export function useUserData() {
             if (token)
                 headers["Authorization"] = `Bearer ${token}`;
             try {
-                const [projectsRes, productsRes, proposalsRes, contractsRes, notifRes] = await Promise.all([
-                    fetch(`/api/projects?userId=${userId}`, { headers }).then((r) => (r.ok ? r.json() : { projects: [] })),
-                    fetch(`/api/products?sellerId=${userId}`, { headers }).then((r) => (r.ok ? r.json() : { products: [] })),
-                    fetch(`/api/proposals?userId=${userId}`, { headers }).then((r) => (r.ok ? r.json() : { proposals: [] })),
-                    fetch(`/api/contracts?userId=${userId}`, { headers }).then((r) => (r.ok ? r.json() : { contracts: [] })),
-                    fetch(`/api/notifications?userId=${userId}`, { headers }).then((r) => (r.ok ? r.json() : { notifications: [] })),
+                const [projectsRes, productsRes, proposalsRes, contractsRes, notifRes, walletRes] = await Promise.all([
+                    apiFetch("/api/projects", { headers }).then((r) => (r.ok ? r.json() : { projects: [] })),
+                    apiFetch(`/api/products?sellerId=${userId}`, { headers }).then((r) => (r.ok ? r.json() : { products: [] })),
+                    apiFetch("/api/proposals", { headers }).then((r) => (r.ok ? r.json() : { proposals: [] })),
+                    apiFetch(`/api/contracts?userId=${userId}`, { headers }).then((r) => (r.ok ? r.json() : { contracts: [] })),
+                    apiFetch(`/api/notifications?userId=${userId}`, { headers }).then((r) => (r.ok ? r.json() : { notifications: [] })),
+                    apiFetch("/api/payments/transactions", { headers }).then(r => r.ok ? r.json() : { totalEarned: 0 }),
                 ]);
                 if (!cancelled) {
+                    setDemoEarnings(walletRes.totalEarned || 0);
+                    setDemoSpent(walletRes.totalSpent || 0); setPaymentMonthly(walletRes.monthly || []);
                     setProjects(projectsRes.projects || []);
                     setProducts(productsRes.products || []);
                     setProposals(proposalsRes.proposals || []);
@@ -58,7 +66,7 @@ export function useUserData() {
         if (!userId)
             return null;
         try {
-            const res = await fetch("/api/projects", {
+            const res = await apiFetch("/api/projects", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -85,7 +93,7 @@ export function useUserData() {
     }, [userId, token]);
     const deleteProject = useCallback(async (projectId) => {
         try {
-            const res = await fetch(`/api/projects/${projectId}`, {
+            const res = await apiFetch(`/api/projects/${projectId}`, {
                 method: "DELETE",
                 headers: token ? { Authorization: `Bearer ${token}` } : {},
             });
@@ -99,7 +107,7 @@ export function useUserData() {
     }, [token]);
     const addProduct = useCallback(async (newProductData) => {
         try {
-            const res = await fetch("/api/products", {
+            const res = await apiFetch("/api/products", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -125,7 +133,7 @@ export function useUserData() {
         if (!userId)
             return null;
         try {
-            const res = await fetch("/api/proposals", {
+            const res = await apiFetch("/api/proposals", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -154,7 +162,7 @@ export function useUserData() {
         }).length,
         publishedProductsCount: products.filter((p) => {
             const s = typeof p.status === "string" ? p.status.toLowerCase() : "";
-            return s === "published" || s === "pending_review" || s === "active" || !s;
+            return s === "published";
         }).length,
         proposalsCount: proposals.length,
         activeContractsCount: contracts.filter((c) => {
@@ -162,8 +170,8 @@ export function useUserData() {
             return s === "active" || s === "created";
         }).length,
         totalSales: user?.studentProfile?.totalSales || products.reduce((sum, p) => sum + (p.salesCount || 0), 0),
-        totalEarnings: user?.studentProfile?.totalEarnings ||
-            products.reduce((sum, p) => sum + (p.salesCount || 0) * (p.price || 0), 0),
+        totalEarnings: demoEarnings,
+        totalSpent: demoSpent,
     };
     return {
         isLoaded,
@@ -172,6 +180,7 @@ export function useUserData() {
         proposals,
         contracts,
         notifications,
+        paymentMonthly,
         stats,
         addProject,
         deleteProject,

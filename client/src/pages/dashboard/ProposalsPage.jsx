@@ -1,3 +1,4 @@
+import { apiFetch } from "@/lib/api";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
@@ -17,7 +18,7 @@ export default function ProposalsPage() {
     return (<div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
       <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="flex items-start justify-between gap-4 mb-8 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold mb-1">My Proposals</h1>
+          <h1 className="text-2xl font-bold mb-1">{isClient ? "Received Proposals" : "My Proposals"}</h1>
           <p className="text-[var(--muted-foreground)]">Track your submitted project bids and client applications</p>
         </div>
         <Link to="/solutions">
@@ -47,7 +48,7 @@ export default function ProposalsPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-2 flex-wrap">
                         <Link to={`/proposals/${proposal.id}`} className="hover:underline">
-                          <h3 className="font-semibold">Custom Solution Bid</h3>
+                          <h3 className="font-semibold">{proposal.solutionRequest?.title || "Project Proposal"}</h3>
                         </Link>
                         <Badge className={getStatusColor(proposal.status)}>{proposal.status}</Badge>
                       </div>
@@ -76,10 +77,11 @@ export default function ProposalsPage() {
                       <Button variant="outline" size="sm" className="gap-1.5 cursor-pointer" disabled={chatLoadingId === proposal.id} onClick={async () => {
                     setChatLoadingId(proposal.id);
                     try {
-                        const res = await fetch("/api/messages/conversations", {
+                        const res = await apiFetch("/api/messages/conversations", {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
                             body: JSON.stringify({
+                                participantId: isClient ? proposal.studentId : proposal.solutionRequest?.clientId,
                                 proposalId: proposal.id,
                                 context: { type: "proposal", id: proposal.id },
                             }),

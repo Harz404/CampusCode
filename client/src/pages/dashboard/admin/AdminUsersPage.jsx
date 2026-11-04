@@ -1,3 +1,4 @@
+import { apiFetch } from "@/lib/api";
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
@@ -13,7 +14,7 @@ export default function AdminUsersPage() {
     const [search, setSearch] = useState("");
     const [actionNotice, setActionNotice] = useState(null);
     useEffect(() => {
-        fetch("/api/admin/users")
+        apiFetch("/api/admin/users")
             .then((res) => (res.ok ? res.json() : null))
             .then((data) => {
             if (data && data.users)
@@ -23,7 +24,7 @@ export default function AdminUsersPage() {
     }, []);
     const handleVerifyUser = async (userId) => {
         try {
-            await fetch(`/api/admin/users/${userId}/verify`, {
+            await apiFetch(`/api/admin/users/${userId}/verify`, {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ isVerified: true }),
@@ -38,7 +39,7 @@ export default function AdminUsersPage() {
         const userToUpdate = userList.find((u) => u.id === userId);
         const nextState = !userToUpdate?.isVerified;
         try {
-            await fetch(`/api/admin/users/${userId}/verify`, {
+            await apiFetch(`/api/admin/users/${userId}/verify`, {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ isVerified: nextState }),

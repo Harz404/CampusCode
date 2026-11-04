@@ -1,3 +1,4 @@
+import { startMailWorker } from "./services/mailService.js";
 import dotenv from "dotenv";
 dotenv.config();
 
@@ -7,6 +8,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { connectDB, isDbConnected } from "./config/db.js";
 import { serveClient } from "./client.js";
+import { getJwtSecret } from "./config/security.js";
 
 // Import Routes
 import authRoutes from "./routes/authRoutes.js";
@@ -21,11 +23,13 @@ import paymentRoutes from "./routes/paymentRoutes.js";
 import aiRoutes from "./routes/aiRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
 import healthRoutes from "./routes/healthRoutes.js";
+import reviewRoutes from "./routes/reviewRoutes.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+getJwtSecret();
 const PORT = process.env.PORT || 5000;
 
 // Middleware
@@ -60,6 +64,7 @@ app.use("/api/notifications", notificationRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/ai", aiRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/reviews", reviewRoutes);
 
 // Express serves both the React app and the API on the same port.
 serveClient(app);
@@ -81,6 +86,7 @@ async function startServer() {
 
   // Connect to MongoDB
   connectDB();
+  startMailWorker();
 }
 
 startServer();

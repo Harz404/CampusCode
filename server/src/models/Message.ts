@@ -8,6 +8,9 @@ export interface IMessage extends Document {
   type: "text" | "file" | "image" | "system";
   attachmentUrl?: string;
   isRead: boolean;
+  editedAt?: Date;
+  deletedAt?: Date;
+  clientMessageId?: string;
   createdAt: Date;
 }
 
@@ -19,6 +22,9 @@ const MessageSchema = new Schema<IMessage>(
     type: { type: String, enum: ["text", "file", "image", "system"], default: "text" },
     attachmentUrl: { type: String },
     isRead: { type: Boolean, default: false },
+    editedAt: { type: Date },
+    deletedAt: { type: Date },
+    clientMessageId: { type: String },
   },
   {
     timestamps: true,
@@ -34,5 +40,6 @@ const MessageSchema = new Schema<IMessage>(
   }
 );
 
+MessageSchema.index({ senderId: 1, clientMessageId: 1 }, { unique: true, partialFilterExpression: { clientMessageId: { $type: "string" } } });
 export const Message = mongoose.model<IMessage>("Message", MessageSchema);
 

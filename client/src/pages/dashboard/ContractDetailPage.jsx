@@ -1,3 +1,5 @@
+import { ContractReview } from "@/components/shared/ContractReview";
+import { apiFetch, apiJson } from "@/lib/api";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -36,8 +38,11 @@ export default function ContractDetailPage() {
     const { id } = useParams();
     const navigate = useNavigate();
     const { user } = useAuth();
-    const isClient = user?.role?.toLowerCase() === "client";
+
     const [contract, setContract] = useState(null);
+    const isClient = contract?.clientId === user?.id;
+    const [actionError, setActionError] = useState("");
+    const [actionBusy, setActionBusy] = useState(false);
     const [loading, setLoading] = useState(true);
     const [messagingLoading, setMessagingLoading] = useState(false);
     // Modals & Action States
@@ -52,17 +57,13 @@ export default function ContractDetailPage() {
     const [revisionNotes, setRevisionNotes] = useState("");
     const [isRequestingRevision, setIsRequestingRevision] = useState(false);
     // Review Modal State
-    const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
-    const [reviewRating, setReviewRating] = useState(5);
-    const [reviewComment, setReviewComment] = useState("");
-    const [reviewSubmitted, setReviewSubmitted] = useState(false);
     // Approve Loading State
     const [approvingId, setApprovingId] = useState(null);
     useEffect(() => {
         let cancelled = false;
         async function loadContract() {
             try {
-                const res = await fetch(`/api/contracts/${id}`);
+                const res = await apiFetch(`/api/contracts/${id}`);
                 if (res.ok) {
                     const data = await res.json();
                     if (!cancelled && data && !data.error) {
@@ -85,117 +86,39 @@ export default function ContractDetailPage() {
             cancelled = true;
         };
     }, [id]);
+    const milestoneAction = async (milestoneId, action, details = {}) => {
+        if (!contract || actionBusy) return false;
+        setActionBusy(true); setActionError("");
+        try {
+            const saved = await apiJson(`/api/contracts/${contract.id}/milestones`, {
+                method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ milestoneId, action, ...details }),
+            });
+            setContract(saved);
+            return true;
+        } catch (error) { setActionError(error.message); return false; }
+        finally { setActionBusy(false); }
+    };
     const handleSubmitDeliverable = async (e) => {
         e.preventDefault();
-        if (!selectedMilestone || !contract)
-            return;
+        if (!selectedMilestone) return;
         setIsSubmitting(true);
-        try {
-            await fetch(`/api/contracts/${contract.id}/milestones`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    action: "submit",
-                    milestoneId: selectedMilestone.id,
-                    notes: submissionNotes,
-                    repoLink: submissionRepo,
-                    driveLink: submissionDrive,
-                }),
-            });
-            setContract((prev) => {
-                if (!prev)
-                    return prev;
-                const updatedMilestones = prev.milestones.map((m) => m.id === selectedMilestone.id ? { ...m, status: "submitted" } : m);
-                return { ...prev, milestones: updatedMilestones, status: "in_review" };
-            });
-            setIsSubmitModalOpen(false);
-            setSubmissionNotes("");
-            setSubmissionRepo("");
-            setSubmissionDrive("");
-        }
-        catch (err) {
-            console.error("Failed to submit milestone:", err);
-        }
-        finally {
-            setIsSubmitting(false);
-        }
+        const saved = await milestoneAction(selectedMilestone.id, "submit", { notes: submissionNotes, repoLink: submissionRepo, driveLink: submissionDrive });
+        setIsSubmitting(false);
+        if (saved) { setIsSubmitModalOpen(false); setSubmissionNotes(""); setSubmissionRepo(""); setSubmissionDrive(""); }
     };
     const handleApproveMilestone = async (milestoneId) => {
-        if (!contract)
-            return;
         setApprovingId(milestoneId);
-        try {
-            const res = await fetch(`/api/contracts/${contract.id}/milestones`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    action: "approve",
-                    milestoneId,
-                }),
-            });
-            const data = await res.json().catch(() => ({}));
-            setContract((prev) => {
-                if (!prev)
-                    return prev;
-                const updatedMilestones = prev.milestones.map((m) => m.id === milestoneId
-                    ? { ...m, status: "approved", approvedAt: new Date().toISOString() }
-                    : m);
-                let nextFound = false;
-                const progressed = updatedMilestones.map((m) => {
-                    if (!nextFound && m.status === "pending") {
-                        nextFound = true;
-                        return { ...m, status: "in_progress" };
-                    }
-                    return m;
-                });
-                const allApproved = progressed.every((m) => m.status === "approved");
-                return {
-                    ...prev,
-                    milestones: progressed,
-                    status: allApproved ? "completed" : "active",
-                };
-            });
-            if (data?.isFullyCompleted) {
-                setIsReviewModalOpen(true);
-            }
-        }
-        catch (err) {
-            console.error("Failed to approve milestone:", err);
-        }
-        finally {
-            setApprovingId(null);
-        }
+        await milestoneAction(milestoneId, "approve");
+        setApprovingId(null);
     };
     const handleRequestRevision = async (e) => {
         e.preventDefault();
-        if (!selectedMilestone || !contract)
-            return;
+        if (!selectedMilestone) return;
         setIsRequestingRevision(true);
-        try {
-            await fetch(`/api/contracts/${contract.id}/milestones`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    action: "request_revision",
-                    milestoneId: selectedMilestone.id,
-                    notes: revisionNotes,
-                }),
-            });
-            setContract((prev) => {
-                if (!prev)
-                    return prev;
-                const updatedMilestones = prev.milestones.map((m) => m.id === selectedMilestone.id ? { ...m, status: "revision_requested" } : m);
-                return { ...prev, milestones: updatedMilestones };
-            });
-            setIsRevisionModalOpen(false);
-            setRevisionNotes("");
-        }
-        catch (err) {
-            console.error("Failed to request revision:", err);
-        }
-        finally {
-            setIsRequestingRevision(false);
-        }
+        const saved = await milestoneAction(selectedMilestone.id, "request_revision", { notes: revisionNotes });
+        setIsRequestingRevision(false);
+        if (saved) { setIsRevisionModalOpen(false); setRevisionNotes(""); }
     };
     if (loading) {
         return (<div className="p-16 flex items-center justify-center">
@@ -206,7 +129,8 @@ export default function ContractDetailPage() {
         return (<div className="p-8 text-center max-w-md mx-auto my-12 space-y-4">
         <h1 className="text-2xl font-bold">Contract Not Found</h1>
         <p className="text-sm text-[var(--muted-foreground)]">The contract you are looking for does not exist.</p>
-        <Link to="/contracts"><Button variant="outline">Back to Contracts</Button></Link>
+        {actionError && <p role="alert" className="text-sm text-red-500">{actionError}</p>}
+      <Link to="/contracts"><Button variant="outline">Back to Contracts</Button></Link>
       </div>);
     }
     const approvedMilestones = contract.milestones?.filter((m) => m.status === "approved") || [];
@@ -216,12 +140,13 @@ export default function ContractDetailPage() {
     const steps = [
         { label: "Proposal Sent", completed: true },
         { label: "Accepted", completed: true },
-        { label: "Escrow Funded", completed: true },
         { label: "In Development", completed: contract.status === "active" || contract.status === "in_review" || contract.status === "completed" },
         { label: "Under Review", completed: contract.status === "in_review" || contract.status === "completed" },
         { label: "Completed", completed: contract.status === "completed" },
     ];
     return (<div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto space-y-6">
+      {actionError && <p role="alert" className="text-sm text-red-500">{actionError}</p>}
+      <p className="text-sm text-[var(--muted-foreground)]">Payments and escrow are not enabled. Work approvals do not release funds.</p>
       <Link to="/contracts" className="inline-flex items-center gap-1.5 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors">
         <ArrowLeft className="h-4 w-4"/> Back to Contracts
       </Link>
@@ -241,11 +166,12 @@ export default function ContractDetailPage() {
             </p>
           </div>
           <div className="flex gap-2 flex-wrap">
+            {contract.projectId && <Link to={`/projects/${contract.projectId}`}><Button variant="outline">Open Project Workspace</Button></Link>}
             <Button variant="outline" className="gap-1.5 cursor-pointer" disabled={messagingLoading} onClick={async () => {
             const otherUserId = isClient ? contract.studentId : contract.clientId;
             setMessagingLoading(true);
             try {
-                const res = await fetch("/api/messages/conversations", {
+                const res = await apiFetch("/api/messages/conversations", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
@@ -275,13 +201,12 @@ export default function ContractDetailPage() {
             }}>
                 <Upload className="h-4 w-4"/> Submit Active Milestone
               </Button>)}
-            {contract.status === "completed" && (<Button variant="outline" className="gap-1.5 text-amber-600 dark:text-amber-400 border-amber-300 dark:border-amber-900/50 cursor-pointer" onClick={() => setIsReviewModalOpen(true)}>
-                <Star className="h-4 w-4 fill-amber-400 text-amber-400"/>
-                {reviewSubmitted ? "Review Submitted" : "Leave Review & Rating"}
-              </Button>)}
+
           </div>
         </div>
       </motion.div>
+
+      {contract.status === "completed" && <ContractReview contractId={contract.id} />}
 
       {/* Contract Lifecycle Stepper */}
       <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
@@ -310,7 +235,7 @@ export default function ContractDetailPage() {
         <div className="lg:col-span-2 space-y-6">
           <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
             <Card>
-              <CardHeader><CardTitle className="text-lg">Financial & Escrow Summary</CardTitle></CardHeader>
+              <CardHeader><CardTitle className="text-lg">Contract Value & Delivery Progress</CardTitle></CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-3 gap-4 text-center">
                   <div className="p-3.5 rounded-xl bg-[var(--muted)]/40 border border-[var(--border)]">
@@ -324,7 +249,7 @@ export default function ContractDetailPage() {
                       {formatCurrency(releasedAmount)}
                     </p>
                     <p className="text-xs text-[var(--muted-foreground)] mt-0.5">
-                      {isClient ? "Released to Student" : "Payouts Released"}
+                      Approved Work Value
                     </p>
                   </div>
                   <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200/50 dark:border-amber-900/40">
@@ -332,14 +257,14 @@ export default function ContractDetailPage() {
                       {formatCurrency(Math.max(0, contract.totalAmount - releasedAmount))}
                     </p>
                     <p className="text-xs text-[var(--muted-foreground)] mt-0.5">
-                      Held in Escrow
+                      Work Not Yet Approved
                     </p>
                   </div>
                 </div>
 
                 <div>
                   <div className="flex items-center justify-between text-xs mb-1.5">
-                    <span className="text-[var(--muted-foreground)]">Milestone Payment Progress</span>
+                    <span className="text-[var(--muted-foreground)]">Milestone Approval Progress</span>
                     <span className="font-semibold">{formatCurrency(releasedAmount)} / {formatCurrency(contract.totalAmount)} ({progressPct}%)</span>
                   </div>
                   <div className="h-2.5 rounded-full bg-[var(--muted)]">
@@ -373,6 +298,14 @@ export default function ContractDetailPage() {
                           </Badge>
                         </div>
                         <p className="text-xs text-[var(--muted-foreground)] mb-2">{milestone.description}</p>
+                        {milestone.history?.length > 0 && <details className="text-xs mb-3"><summary className="cursor-pointer">Delivery & revision history ({milestone.history.length})</summary>
+                          <div className="space-y-3 mt-2">{milestone.history.map((event, eventIndex) => <div key={event._id || eventIndex} className="border-l-2 border-[var(--border)] pl-3">
+                            <p className="font-medium">{event.action.replaceAll("_", " ")} · {formatDate(event.createdAt)}</p>
+                            {event.notes && <p className="whitespace-pre-wrap break-words">{event.notes}</p>}
+                            {event.repoLink && <a className="underline block" href={event.repoLink} target="_blank" rel="noopener noreferrer">Repository delivery</a>}
+                            {event.driveLink && <a className="underline block" href={event.driveLink} target="_blank" rel="noopener noreferrer">Delivery files</a>}
+                          </div>)}</div>
+                        </details>}
                         <div className="flex items-center gap-4 text-xs text-[var(--muted-foreground)] flex-wrap">
                           <span className="flex items-center gap-1 font-semibold text-[var(--primary)]">
                             <DollarSign className="h-3 w-3"/> {formatCurrency(milestone.amount)}
@@ -383,6 +316,7 @@ export default function ContractDetailPage() {
                       </div>
 
                       <div className="shrink-0 flex items-center gap-2">
+                        {!isClient && milestone.status === "pending" && contract.milestones.slice(0, idx).every(item => item.status === "approved") && !["cancelled", "disputed", "completed"].includes(contract.status) && <Button size="sm" disabled={actionBusy} onClick={() => milestoneAction(milestone.id, "start")}>Start Work</Button>}
                         {!isClient && (milestone.status === "in_progress" || milestone.status === "revision_requested") && (<Button size="sm" className="text-xs gap-1 cursor-pointer shadow" onClick={() => {
                     setSelectedMilestone(milestone);
                     setIsSubmitModalOpen(true);
@@ -398,9 +332,9 @@ export default function ContractDetailPage() {
                 }}>
                               Request Revision
                             </Button>
-                            <Button size="sm" className="text-xs gap-1 bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer shadow" disabled={approvingId === milestone.id} onClick={() => handleApproveMilestone(milestone.id)}>
+                            <Button size="sm" className="text-xs gap-1 bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer shadow" disabled={actionBusy} onClick={() => handleApproveMilestone(milestone.id)}>
                               {approvingId === milestone.id ? (<Loader2 className="h-3 w-3 animate-spin"/>) : (<Check className="h-3 w-3"/>)}
-                              Approve & Release {formatCurrency(milestone.amount)}
+                              Approve Work
                             </Button>
                           </div>)}
                         {isClient && milestone.status === "in_progress" && (<Badge variant="warning" className="text-xs">In Development</Badge>)}
@@ -420,16 +354,16 @@ export default function ContractDetailPage() {
                 <Avatar name={contract.client?.name || "Client"} size="lg"/>
                 <div>
                   <p className="font-semibold">{contract.client?.name}</p>
-                  <p className="text-xs text-[var(--muted-foreground)]">{contract.client?.clientProfile?.organization || "Verified Organization"}</p>
+                  <p className="text-xs text-[var(--muted-foreground)]">{contract.client?.clientProfile?.organization || "Client"}</p>
                 </div>
               </div>
               <div className="flex items-center gap-2 text-xs">
                 <Star className="h-3 w-3 fill-amber-400 text-amber-400"/>
-                <span className="font-medium">{contract.client?.clientProfile?.rating || 4.9}</span>
-                <span className="text-[var(--muted-foreground)]">({contract.client?.clientProfile?.reviewCount || 12} reviews)</span>
+                <span className="font-medium">{contract.client?.clientProfile?.rating || 0}</span>
+                <span className="text-[var(--muted-foreground)]">({contract.client?.clientProfile?.reviewCount || 0} reviews)</span>
               </div>
               {contract.client?.isVerified && (<div className="flex items-center gap-2 text-xs text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 p-2 rounded-lg border border-emerald-200 dark:border-emerald-900/40">
-                  <ShieldCheck className="h-3.5 w-3.5"/> Verified Escrow Employer
+                  <ShieldCheck className="h-3.5 w-3.5"/> Contract Client
                 </div>)}
             </CardContent>
           </Card>
@@ -470,7 +404,8 @@ export default function ContractDetailPage() {
             <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative w-full max-w-lg rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-2xl p-6 space-y-5">
               <div className="flex items-center justify-between border-b border-[var(--border)] pb-3">
                 <div>
-                  <h3 className="text-lg font-bold">Submit Milestone Deliverables</h3>
+                  {actionError && <p role="alert" className="text-sm text-red-500">{actionError}</p>}
+                <h3 className="text-lg font-bold">Submit Milestone Deliverables</h3>
                   <p className="text-xs text-[var(--muted-foreground)]">{selectedMilestone.title} ({formatCurrency(selectedMilestone.amount)})</p>
                 </div>
                 <button onClick={() => setIsSubmitModalOpen(false)} className="p-1 rounded hover:bg-[var(--muted)] cursor-pointer">
@@ -511,6 +446,7 @@ export default function ContractDetailPage() {
         {isRevisionModalOpen && selectedMilestone && (<div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
             <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-2xl p-6 space-y-5">
               <div className="flex items-center justify-between border-b border-[var(--border)] pb-3">
+                {actionError && <p role="alert" className="text-sm text-red-500">{actionError}</p>}
                 <h3 className="text-lg font-bold">Request Milestone Revision</h3>
                 <button onClick={() => setIsRevisionModalOpen(false)} className="p-1 rounded hover:bg-[var(--muted)] cursor-pointer">
                   <X className="h-4 w-4"/>
@@ -534,41 +470,5 @@ export default function ContractDetailPage() {
           </div>)}
       </AnimatePresence>
 
-      {/* MODAL 3: LEAVE REVIEW & RATING */}
-      <AnimatePresence>
-        {isReviewModalOpen && (<div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-2xl p-6 space-y-5">
-              <div className="flex items-center justify-between border-b border-[var(--border)] pb-3">
-                <h3 className="text-lg font-bold">Contract Completed!</h3>
-                <button onClick={() => setIsReviewModalOpen(false)} className="p-1 rounded hover:bg-[var(--muted)] cursor-pointer">
-                  <X className="h-4 w-4"/>
-                </button>
-              </div>
-
-              <div className="text-center space-y-4">
-                <p className="text-xs text-[var(--muted-foreground)]">
-                  Please rate your collaboration with {isClient ? contract.student?.name : contract.client?.name}.
-                </p>
-
-                <div className="flex items-center justify-center gap-1.5">
-                  {[1, 2, 3, 4, 5].map((star) => (<button key={star} type="button" onClick={() => setReviewRating(star)} className="p-1 cursor-pointer hover:scale-110 transition-transform">
-                      <Star className={`h-7 w-7 ${star <= reviewRating
-                    ? "fill-amber-400 text-amber-400"
-                    : "text-[var(--muted)]"}`}/>
-                    </button>))}
-                </div>
-
-                <Textarea rows={3} placeholder="Share a short review about code quality, communication, and speed..." value={reviewComment} onChange={(e) => setReviewComment(e.target.value)}/>
-
-                <Button className="w-full gap-2 cursor-pointer" onClick={() => {
-                setReviewSubmitted(true);
-                setIsReviewModalOpen(false);
-            }}>
-                  <Check className="h-4 w-4"/> Submit Review
-                </Button>
-              </div>
-            </motion.div>
-          </div>)}
-      </AnimatePresence>
     </div>);
 }

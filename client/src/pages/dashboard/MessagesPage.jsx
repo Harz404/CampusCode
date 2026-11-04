@@ -1,3 +1,4 @@
+import { apiFetch, apiJson } from "@/lib/api";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Send, Search, ArrowLeft, MessageSquare, Loader2, Paperclip, MoreVertical, Edit2, Trash2, X, Check, CheckCheck, FileText, Download, ShieldCheck, } from "lucide-react";
@@ -45,7 +46,8 @@ function formatDateSeparator(dateStr) {
     return d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
 }
 function getOtherParticipant(participants, myId) {
-    return participants.find((p) => p.user.id !== myId)?.user || participants[0]?.user || null;
+    const users = (participants || []).map(p => p.user || p).filter(Boolean);
+    return users.find(p => p.id !== myId) || users[0] || null;
 }
 function getDisplayName(user) {
     if (!user)
@@ -73,6 +75,10 @@ export default function MessagesPage() {
     const [activeMenuMessageId, setActiveMenuMessageId] = useState(null);
     const [previewImage, setPreviewImage] = useState(null);
     const [pendingAttachment, setPendingAttachment] = useState(null);
+    const [chatError, setChatError] = useState("");
+    const activeConversation = useRef("");
+    const messageRequest = useRef(0);
+    const pendingSend = useRef(null);
     const messagesEndRef = useRef(null);
     const chatContainerRef = useRef(null);
     const inputRef = useRef(null);
@@ -81,14 +87,13 @@ export default function MessagesPage() {
         if (!user?.id)
             return;
         try {
-            const res = await fetch("/api/messages");
-            if (!res.ok)
-                return;
+            const res = await apiFetch("/api/messages/conversations");
+            if (!res.ok) throw new Error("Could not load conversations. Please retry.");
             const data = await res.json();
             setConversations(data.conversations || []);
         }
         catch (err) {
-            console.error("Failed to fetch conversations:", err);
+            setChatError(err.message);
         }
         finally {
             setLoadingConversations(false);
@@ -105,30 +110,28 @@ export default function MessagesPage() {
         return () => clearInterval(interval);
     }, [user?.id, fetchConversations]);
     const fetchMessages = useCallback(async (convId) => {
-        if (!convId)
-            return;
+        if (!convId) return;
+        const request = ++messageRequest.current;
         try {
-            const res = await fetch(`/api/messages?conversationId=${convId}`);
-            if (!res.ok)
-                return;
-            const data = await res.json();
-            setMessages(data.messages || []);
-        }
-        catch (err) {
-            console.error("Failed to fetch messages:", err);
-        }
+            const data = await apiJson(`/api/messages/${convId}`);
+            if (activeConversation.current === convId && request === messageRequest.current) setMessages(data.messages || []);
+            return true;
+        } catch (err) { setChatError(err.message); return false; }
     }, []);
     const selectConversation = useCallback(async (convId) => {
+        activeConversation.current = convId;
+        setChatError("");
         setSelectedConvId(convId);
         setShowMobileChat(true);
         setLoadingMessages(true);
         setMessages([]);
         setEditingMessage(null);
         setPendingAttachment(null);
-        await fetchMessages(convId);
-        setLoadingMessages(false);
+        const loaded = await fetchMessages(convId);
+        if (activeConversation.current === convId) setLoadingMessages(false);
+        if (!loaded) return;
         try {
-            await fetch("/api/messages/read", {
+            await apiJson("/api/messages/read", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ conversationId: convId }),
@@ -179,100 +182,35 @@ export default function MessagesPage() {
     };
     const handleSend = async () => {
         const text = newMessage.trim();
-        if ((!text && !pendingAttachment) || !selectedConvId || !user?.id || sending)
-            return;
-        if (editingMessage) {
-            setSending(true);
-            try {
-                const res = await fetch(`/api/messages/${editingMessage.id}`, {
-                    method: "PATCH",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ content: text }),
-                });
-                if (res.ok) {
-                    const updated = await res.json();
-                    setMessages((prev) => prev.map((m) => (m.id === editingMessage.id ? updated : m)));
-                }
-            }
-            catch (err) {
-                console.error("Failed to edit message:", err);
-            }
-            finally {
-                setSending(false);
-                setEditingMessage(null);
-                setNewMessage("");
-                inputRef.current?.focus();
-            }
-            return;
-        }
-        setSending(true);
-        setNewMessage("");
-        const attachmentPayload = pendingAttachment ? pendingAttachment.previewUrl : null;
-        const messageType = pendingAttachment ? pendingAttachment.type : "TEXT";
-        const attachmentName = pendingAttachment?.name;
-        const contentToSend = text || (messageType === "IMAGE" ? "📷 Photo" : `📎 ${attachmentName || "Document"}`);
-        setPendingAttachment(null);
-        const optimisticMsg = {
-            id: `temp-${Date.now()}`,
-            conversationId: selectedConvId,
-            senderId: user.id,
-            content: contentToSend,
-            type: messageType,
-            attachmentUrl: attachmentPayload,
-            createdAt: new Date().toISOString(),
-            isRead: false,
-            sender: {
-                id: user.id,
-                name: user.name,
-                avatar: user.avatar,
-                role: user.role,
-            },
-        };
-        setMessages((prev) => [...prev, optimisticMsg]);
-        setConversations((prev) => prev.map((c) => c.id === selectedConvId
-            ? {
-                ...c,
-                lastMessage: {
-                    id: optimisticMsg.id,
-                    content: contentToSend,
-                    createdAt: optimisticMsg.createdAt,
-                    type: messageType,
-                },
-                updatedAt: optimisticMsg.createdAt,
-            }
-            : c));
+        if (!text || !selectedConvId || !user?.id || sending) return;
+        const conversationId = selectedConvId;
+        const editingId = editingMessage?.id;
+        const signature = JSON.stringify({ conversationId, text });
+        if (!editingId && pendingSend.current?.signature !== signature) pendingSend.current = { signature, id: crypto.randomUUID() };
+        setSending(true); setChatError("");
         try {
-            const res = await fetch("/api/messages", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    conversationId: selectedConvId,
-                    content: contentToSend,
-                    type: messageType,
-                    attachmentUrl: attachmentPayload,
-                }),
+            const saved = await apiJson(editingId ? `/api/messages/${editingId}` : "/api/messages", {
+                method: editingId ? "PATCH" : "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ content: text, ...(editingId ? {} : { conversationId, type: "text", clientMessageId: pendingSend.current.id }) }),
             });
-            if (res.ok) {
-                const savedMsg = await res.json();
-                setMessages((prev) => prev.map((m) => (m.id === optimisticMsg.id ? savedMsg : m)));
+            if (!editingId) pendingSend.current = null;
+            if (activeConversation.current === conversationId) {
+                messageRequest.current++;
+                setMessages(previous => editingId ? previous.map(message => message.id === editingId ? saved : message) : [...previous.filter(message => message.id !== saved.id), saved]);
+                setNewMessage(""); setEditingMessage(null);
             }
-        }
-        catch (err) {
-            console.error("Failed to send message:", err);
-        }
-        finally {
-            setSending(false);
-            inputRef.current?.focus();
-        }
+            await fetchConversations();
+        } catch (err) { setChatError(err.message || "Could not save your message; your draft has been kept."); }
+        finally { setSending(false); inputRef.current?.focus(); }
     };
     const handleDeleteMessage = async (msgId) => {
-        setMessages((prev) => prev.filter((m) => m.id !== msgId));
+        setChatError("");
         try {
-            await fetch(`/api/messages/${msgId}`, { method: "DELETE" });
-        }
-        catch (err) {
-            console.error("Failed to delete message:", err);
-        }
+            await apiJson(`/api/messages/${msgId}`, { method: "DELETE" });
+            messageRequest.current++;
+            setMessages(previous => previous.filter(message => message.id !== msgId));
+            await fetchConversations();
+        } catch (err) { setChatError(err.message || "Could not delete message"); }
     };
     const handleStartEdit = (msg) => {
         setEditingMessage(msg);
@@ -320,6 +258,7 @@ export default function MessagesPage() {
       </div>);
     }
     return (<div className="h-[calc(100vh-4rem)] flex overflow-hidden relative">
+      {chatError && <div role="alert" className="absolute top-0 inset-x-0 z-20 p-3 bg-[var(--card)] border border-red-500 text-red-500 text-sm">{chatError}<button className="ml-3 underline" onClick={() => setChatError("")}>Dismiss</button></div>}
       {/* Conversation List */}
       <div className={`w-full md:w-80 lg:w-96 border-r border-[var(--border)] flex flex-col shrink-0 ${showMobileChat ? "hidden md:flex" : "flex"}`}>
         <div className="p-4 border-b border-[var(--border)]">
@@ -546,7 +485,7 @@ export default function MessagesPage() {
               <div className="flex items-center gap-2">
                 <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*,.pdf,.doc,.docx,.zip,.txt,.json,.js,.ts,.tsx,.py" className="hidden"/>
 
-                <Button type="button" variant="ghost" size="icon" className="shrink-0 text-[var(--muted-foreground)] hover:text-[var(--foreground)] cursor-pointer" onClick={() => fileInputRef.current?.click()} title="Attach photo or document">
+                <Button type="button" variant="ghost" size="icon" className="shrink-0 text-[var(--muted-foreground)] hover:text-[var(--foreground)] cursor-pointer" disabled title="Attachments are not available yet">
                   <Paperclip className="h-5 w-5"/>
                 </Button>
 

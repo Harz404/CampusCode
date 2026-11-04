@@ -1,3 +1,4 @@
+import { apiFetch } from "@/lib/api";
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
@@ -9,7 +10,7 @@ import { formatCurrency, formatDate } from "../../../lib/utils";
 export default function AdminRequestsPage() {
     const [solutionRequests, setSolutionRequests] = useState([]);
     useEffect(() => {
-        fetch("/api/solutions")
+        apiFetch("/api/solutions")
             .then((res) => (res.ok ? res.json() : null))
             .then((data) => {
             if (data && data.requests)

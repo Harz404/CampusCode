@@ -1,3 +1,4 @@
+import { apiFetch } from "@/lib/api";
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
@@ -29,7 +30,7 @@ export function MarketplacePage() {
                 if (priceFilter === "paid")
                     queryParams.set("free", "false");
                 queryParams.set("sort", sortBy);
-                const res = await fetch(`/api/products?${queryParams.toString()}`);
+                const res = await apiFetch(`/api/products?${queryParams.toString()}`);
                 let apiProducts = [];
                 if (res.ok) {
                     const data = await res.json();
@@ -85,7 +86,7 @@ export function MarketplacePage() {
             <select className="h-10 rounded-lg border border-[var(--border)] bg-[var(--card)] text-[var(--foreground)] px-3 text-sm custom-select cursor-pointer" value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
               <option value="newest">Newest First</option>
               <option value="popular">Most Popular</option>
-              <option value="rating">Highest Rated</option>
+
               <option value="price_low">Price: Low to High</option>
               <option value="price_high">Price: High to Low</option>
             </select>
@@ -150,7 +151,7 @@ export function MarketplacePage() {
                       <div className="flex items-center justify-between text-xs text-[var(--muted-foreground)] pt-3 border-t border-[var(--border)]">
                         <div className="flex items-center gap-1">
                           <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400"/>
-                          <span className="font-medium">{product.rating ?? 5.0}</span>
+                          <span className="font-medium">{product.reviewCount ? product.rating : "No reviews yet"}</span>
                           <span>({product.reviewCount ?? 0})</span>
                         </div>
                         <span>{(product.salesCount ?? 0).toLocaleString()} sales</span>

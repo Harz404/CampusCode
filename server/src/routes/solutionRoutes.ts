@@ -1,3 +1,4 @@
+import { access, allowFields } from "../middleware/access.js";
 import { Router } from "express";
 import {
   getSolutionRequests,
@@ -13,9 +14,9 @@ const router = Router();
 router.get("/", optionalAuth, getSolutionRequests);
 router.get("/:id", optionalAuth, getSolutionRequestById);
 router.post("/", requireAuth, createSolutionRequest);
-router.patch("/:id", requireAuth, updateSolutionRequest);
-router.put("/:id", requireAuth, updateSolutionRequest);
-router.delete("/:id", requireAuth, deleteSolutionRequest);
+router.patch("/:id", requireAuth, access("solution", true), allowFields("solution"), updateSolutionRequest);
+router.put("/:id", requireAuth, access("solution", true), allowFields("solution"), updateSolutionRequest);
+router.delete("/:id", requireAuth, access("solution", true), deleteSolutionRequest);
 
 export default router;
 

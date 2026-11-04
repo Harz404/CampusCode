@@ -147,7 +147,7 @@ export function RegisterPage() {
                 </div>
                 <div>
                   <label className="mb-1.5 block text-xs font-medium text-[var(--muted-foreground)]">
-                    Password (min 6 characters)
+                    Password (min 8 characters)
                   </label>
                   <div className="relative">
                     <Input type={showPassword ? "text" : "password"} required placeholder="••••••••" className="pr-10" value={password} onChange={(e) => setPassword(e.target.value)}/>

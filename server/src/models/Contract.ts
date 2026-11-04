@@ -1,12 +1,14 @@
 import mongoose, { Schema, Document } from "mongoose";
 
 export interface IContractMilestone {
+  _id?: mongoose.Types.ObjectId;
   title: string;
   description: string;
   amount: number;
   status: "pending" | "in_progress" | "submitted" | "approved" | "revision_requested";
   dueDate?: Date;
   completedAt?: Date;
+  history: { action: string; actorId: mongoose.Types.ObjectId; notes: string; repoLink?: string; driveLink?: string; createdAt: Date }[];
 }
 
 export interface IContract extends Document {
@@ -56,6 +58,14 @@ const ContractSchema = new Schema<IContract>(
         },
         dueDate: { type: Date },
         completedAt: { type: Date },
+        history: [{
+          action: { type: String, enum: ["start", "submit", "approve", "request_revision"], required: true },
+          actorId: { type: Schema.Types.ObjectId, ref: "User", required: true },
+          notes: { type: String, default: "" },
+          repoLink: { type: String },
+          driveLink: { type: String },
+          createdAt: { type: Date, default: Date.now },
+        }],
       },
     ],
   },

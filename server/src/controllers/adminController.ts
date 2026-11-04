@@ -1,3 +1,6 @@
+import mongoose from "mongoose";
+import { moderationTransition, ProductError, validateSubmission } from "../services/productService.js";
+import { serializeProduct } from "./productController.js";
 import { Response } from "express";
 import { User } from "../models/User.js";
 import { Product } from "../models/Product.js";
@@ -45,10 +48,16 @@ export async function getAdminUsers(req: AuthRequest, res: Response) {
 export async function updateProductStatus(req: AuthRequest, res: Response) {
   try {
     const { id } = req.params;
-    const { status } = req.body;
-    const product = await Product.findByIdAndUpdate(id, { status }, { new: true });
-    return res.json(product?.toJSON());
+    if (!mongoose.isValidObjectId(id)) return res.status(404).json({ error: "Product not found" });
+    const product = await Product.findById(id);
+    if (!product) return res.status(404).json({ error: "Product not found" });
+    const decision = moderationTransition(product.status, req.body.status, req.body.reason || "");
+    if (decision.status === "published") validateSubmission(product.toObject());
+    const saved = await Product.findOneAndUpdate({ _id: id, status: product.status, updatedAt: product.updatedAt }, { $set: { status: decision.status, moderationVerified: decision.status === "published", moderationReason: decision.reason }, $push: { moderationHistory: { ...decision, actorId: req.user!.id, createdAt: new Date() } } }, { new: true, runValidators: true });
+    if (!saved) return res.status(409).json({ error: "Product changed; refresh before reviewing" });
+    return res.json(serializeProduct(saved, req.user!.id, req.user!.role));
   } catch (error) {
+    if (error instanceof ProductError) return res.status(error.status).json({ error: error.message });
     return res.status(500).json({ error: "Failed to update product status" });
   }
 }

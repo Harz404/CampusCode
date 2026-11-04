@@ -1,0 +1,47 @@
+name: Build and test
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    env:
+      JWT_SECRET: ci-only-disposable-test-signing-secret
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: |
+            client/package-lock.json
+            server/package-lock.json
+      - name: Install frontend
+        run: npm ci
+        working-directory: client
+      - name: Install backend
+        run: npm ci
+        working-directory: server
+      - name: Restore MongoDB test runtime
+        uses: actions/cache@v4
+        with:
+          path: server/node_modules/.cache/mongodb-binaries
+          key: mongodb-test-${{ runner.os }}-7.0.24
+      - name: Build frontend
+        run: npm run build
+        working-directory: client
+      - name: Frontend helper tests
+        run: npm test
+        working-directory: client
+      - name: Backend build and regression tests
+        run: npm test
+        working-directory: server
+      - name: Disposable MongoDB integration tests
+        run: npm run test:integration
+        working-directory: server

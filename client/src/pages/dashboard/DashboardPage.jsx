@@ -1,3 +1,4 @@
+import { apiFetch } from "@/lib/api";
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
@@ -15,15 +16,15 @@ const fadeUp = {
 };
 export function DashboardPage() {
     const { user, isAuthenticated } = useAuth();
-    const { projects, isLoaded, stats } = useUserData();
+    const { projects, isLoaded, stats, paymentMonthly } = useUserData();
     const [solutionRequests, setSolutionRequests] = useState([]);
     const [productsList, setProductsList] = useState([]);
     useEffect(() => {
-        fetch("/api/solutions")
+        apiFetch("/api/solutions")
             .then((res) => res.json())
             .then((data) => setSolutionRequests(data.requests || []))
             .catch(() => setSolutionRequests([]));
-        fetch("/api/products")
+        apiFetch("/api/products")
             .then((res) => res.json())
             .then((data) => setProductsList(data.products || []))
             .catch(() => setProductsList([]));
@@ -41,13 +42,13 @@ export function DashboardPage() {
         { label: "Applications", value: stats.proposalsCount, icon: Send, color: "text-purple-500 bg-purple-100 dark:bg-purple-900/30" },
         { label: "Active Contracts", value: stats.activeContractsCount, icon: FileCheck, color: "text-amber-500 bg-amber-100 dark:bg-amber-900/30" },
         { label: "Total Sales", value: stats.totalSales, icon: DollarSign, color: "text-cyan-500 bg-cyan-100 dark:bg-cyan-900/30" },
-        { label: "Total Earnings", value: formatCurrency(stats.totalEarnings), icon: TrendingUp, color: "text-rose-500 bg-rose-100 dark:bg-rose-900/30", isString: true },
+        { label: "Demo Earnings", value: formatCurrency(stats.totalEarnings), icon: TrendingUp, color: "text-rose-500 bg-rose-100 dark:bg-rose-900/30", isString: true },
     ];
     const clientStats = [
         { label: "Open Requests", value: solutionRequests.length, icon: Lightbulb, color: "text-emerald-500 bg-emerald-100 dark:bg-emerald-900/30" },
         { label: "Active Contracts", value: stats.activeContractsCount, icon: FileCheck, color: "text-amber-500 bg-amber-100 dark:bg-amber-900/30" },
         { label: "Proposals Received", value: stats.proposalsCount, icon: Send, color: "text-purple-500 bg-purple-100 dark:bg-purple-900/30" },
-        { label: "Total Spent", value: formatCurrency(stats.totalEarnings), icon: DollarSign, color: "text-rose-500 bg-rose-100 dark:bg-rose-900/30", isString: true },
+        { label: "Demo Spending", value: formatCurrency(stats.totalSpent), icon: DollarSign, color: "text-rose-500 bg-rose-100 dark:bg-rose-900/30", isString: true },
     ];
     const dashboardStats = isClient ? clientStats : studentStats;
     const studentQuickActions = [
@@ -63,16 +64,7 @@ export function DashboardPage() {
         { label: "View My Requirements", href: "/solutions", icon: Lightbulb },
     ];
     const quickActions = isClient ? clientQuickActions : studentQuickActions;
-    const userEarningsData = [
-        { month: "Jan", earnings: 0 },
-        { month: "Feb", earnings: 0 },
-        { month: "Mar", earnings: 0 },
-        { month: "Apr", earnings: 0 },
-        { month: "May", earnings: 0 },
-        { month: "Jun", earnings: 0 },
-        { month: "Jul", earnings: Math.round(stats.totalEarnings * 0.4) },
-        { month: "Aug", earnings: stats.totalEarnings },
-    ];
+    const userEarningsData = paymentMonthly.map(row => ({ month: row.month, earnings: isClient ? row.spent : row.earned }));
     const userSkills = user?.studentProfile?.skills || ["React", "TypeScript", "Node.js"];
     const matchedRequests = solutionRequests
         .filter((sr) => sr.status === "open")
@@ -230,13 +222,13 @@ export function DashboardPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <CardTitle className="text-base">
-                    {isClient ? "Spending Overview" : "Monthly Earnings"}
+                    {isClient ? "Demo Spending" : "Monthly Demo Earnings"}
                   </CardTitle>
                   <p className="text-xs text-[var(--muted-foreground)]">
-                    Total: {formatCurrency(stats.totalEarnings)}
+                    Demo total: {formatCurrency(isClient ? stats.totalSpent : stats.totalEarnings)}
                   </p>
                 </div>
-                <Link to={isClient ? "/contracts" : "/earnings"}>
+                <Link to={isClient ? "/purchases" : "/earnings"}>
                   <Button variant="ghost" size="sm" className="text-xs cursor-pointer">View details</Button>
                 </Link>
               </div>

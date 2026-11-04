@@ -5,8 +5,18 @@ export interface IOrder extends Document {
   productId: mongoose.Types.ObjectId;
   buyerId: mongoose.Types.ObjectId;
   amount: number;
-  status: "pending" | "completed" | "refunded" | "disputed";
+  status: "pending" | "completed" | "refunded" | "disputed" | "failed" | "cancelled";
   paymentId?: string;
+  mode?: "demo";
+  requestKey?: string;
+  entitlementKey?: string;
+  productName?: string;
+  currency?: string;
+  license?: string;
+  licenseKey?: string;
+  platformFee?: number;
+  sellerEarnings?: number;
+  delivery?: Record<string, unknown>;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -18,10 +28,20 @@ const OrderSchema = new Schema<IOrder>(
     amount: { type: Number, required: true },
     status: {
       type: String,
-      enum: ["pending", "completed", "refunded", "disputed"],
-      default: "completed",
+      enum: ["pending", "completed", "refunded", "disputed", "failed", "cancelled"],
+      default: "pending",
     },
     paymentId: { type: String },
+    mode: { type: String, enum: ["demo"] },
+    requestKey: { type: String, unique: true, sparse: true },
+    entitlementKey: { type: String, unique: true, sparse: true },
+    productName: { type: String },
+    currency: { type: String, default: "INR" },
+    license: { type: String },
+    licenseKey: { type: String },
+    platformFee: { type: Number },
+    sellerEarnings: { type: Number },
+    delivery: { type: Schema.Types.Mixed, select: false },
   },
   {
     timestamps: true,

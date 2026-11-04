@@ -8,6 +8,8 @@ export interface ITransaction extends Document {
   fromUserId?: mongoose.Types.ObjectId;
   toUserId?: mongoose.Types.ObjectId;
   orderId?: string;
+  mode?: "demo";
+  requestKey?: string;
   contractId?: mongoose.Types.ObjectId;
   milestoneId?: string;
   description: string;
@@ -26,6 +28,8 @@ const TransactionSchema = new Schema<ITransaction>(
     fromUserId: { type: Schema.Types.ObjectId, ref: "User" },
     toUserId: { type: Schema.Types.ObjectId, ref: "User" },
     orderId: { type: String },
+    mode: { type: String, enum: ["demo"] },
+    requestKey: { type: String, unique: true, sparse: true },
     contractId: { type: Schema.Types.ObjectId, ref: "Contract" },
     milestoneId: { type: String },
     description: { type: String, required: true },

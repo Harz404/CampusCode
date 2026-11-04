@@ -1,3 +1,4 @@
+import { apiFetch } from "@/lib/api";
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { ArrowDownRight, DollarSign, TrendingUp } from "lucide-react";
@@ -7,7 +8,7 @@ import { formatCurrency, formatRelativeTime } from "../../../lib/utils";
 export default function AdminTransactionsPage() {
     const [transactions, setTransactions] = useState([]);
     useEffect(() => {
-        fetch("/api/admin/transactions")
+        apiFetch("/api/admin/transactions")
             .then((res) => (res.ok ? res.json() : null))
             .then((data) => {
             if (data && data.transactions)

@@ -1,3 +1,5 @@
+import { actOnMilestone, MilestoneError } from "../services/milestoneService.js";
+import { sameId } from "../middleware/access.js";
 import { Response } from "express";
 import { Contract } from "../models/Contract.js";
 import { AuthRequest } from "../middleware/auth.js";
@@ -8,7 +10,7 @@ export async function getContracts(req: AuthRequest, res: Response) {
     const { userId, studentId, clientId, status } = req.query;
     const filter: Record<string, unknown> = {};
 
-    const targetUser = userId || studentId || clientId || req.user?.id;
+    const targetUser = req.user!.id;
     if (targetUser && mongoose.Types.ObjectId.isValid(targetUser as string)) {
       filter.$or = [{ studentId: targetUser }, { clientId: targetUser }];
     }
@@ -23,18 +25,7 @@ export async function getContracts(req: AuthRequest, res: Response) {
       .populate("studentId", "name email avatar studentProfile")
       .populate("clientId", "name email avatar clientProfile");
 
-    const formatted = contracts.map((c) => {
-      const cJson: any = c.toJSON();
-      if (cJson.studentId && typeof cJson.studentId === "object") {
-        cJson.student = cJson.studentId;
-        cJson.studentId = (cJson.student as { id?: string }).id || cJson.studentId;
-      }
-      if (cJson.clientId && typeof cJson.clientId === "object") {
-        cJson.client = cJson.clientId;
-        cJson.clientId = (cJson.client as { id?: string }).id || cJson.clientId;
-      }
-      return cJson;
-    });
+    const formatted = contracts.map(serializeContract);
 
     return res.json({ contracts: formatted, total: formatted.length });
   } catch (error) {
@@ -59,46 +50,32 @@ export async function getContractById(req: AuthRequest, res: Response) {
       return res.status(404).json({ error: "Contract not found" });
     }
 
-    const cJson: any = contract.toJSON();
-    if (cJson.studentId && typeof cJson.studentId === "object") {
-      cJson.student = cJson.studentId;
-      cJson.studentId = (cJson.student as { id?: string }).id || cJson.studentId;
-    }
-    if (cJson.clientId && typeof cJson.clientId === "object") {
-      cJson.client = cJson.clientId;
-      cJson.clientId = (cJson.client as { id?: string }).id || cJson.clientId;
-    }
-
-    return res.json(cJson);
+    return res.json(serializeContract(contract));
   } catch (error) {
     console.error("[Contract GetById Error]:", error);
     return res.status(500).json({ error: "Failed to fetch contract" });
   }
 }
 
-export async function updateContractMilestone(req: AuthRequest, res: Response) {
-  try {
-    const { id, milestoneIndex } = req.params;
-    const { status } = req.body;
-
-    const contract = await Contract.findById(id);
-    if (!contract) {
-      return res.status(404).json({ error: "Contract not found" });
+export function serializeContract(contract: any) {
+  const data = contract.toJSON();
+  for (const [field, label] of [["studentId", "student"], ["clientId", "client"], ["solutionRequestId", "solutionRequest"]]) {
+    if (data[field] && typeof data[field] === "object" && (data[field].name || data[field].title)) {
+      data[label] = data[field]; data[field] = data[label].id || String(data[label]._id);
     }
-
-    const idx = Number(milestoneIndex);
-    if (contract.milestones && contract.milestones[idx]) {
-      contract.milestones[idx].status = status;
-      if (status === "approved") {
-        contract.milestones[idx].completedAt = new Date();
-      }
-      await contract.save();
-    }
-
-    return res.json(contract.toJSON());
-  } catch (error) {
-    console.error("[Contract Milestone Error]:", error);
-    return res.status(500).json({ error: "Failed to update milestone" });
   }
+  data.milestones = (data.milestones || []).map((milestone: any) => ({ ...milestone, id: milestone.id || String(milestone._id), approvedAt: milestone.completedAt }));
+  return data;
 }
 
+export async function updateContractMilestone(req: AuthRequest, res: Response) {
+  try {
+    const contract = await actOnMilestone(req.params.id, req.params.milestoneId || req.body.milestoneId, req.user!.id, req.body);
+    if (!contract) return res.status(503).json({ error: "Milestone action did not complete" });
+    return res.json(serializeContract(contract));
+  } catch (error) {
+    if (error instanceof MilestoneError) return res.status(error.status).json({ error: error.message });
+    console.error("[Milestone Action Error]", error);
+    return res.status(503).json({ error: "Could not save milestone action. Refresh and retry." });
+  }
+}

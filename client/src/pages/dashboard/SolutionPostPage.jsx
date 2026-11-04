@@ -1,3 +1,4 @@
+import { apiFetch } from "@/lib/api";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
@@ -48,7 +49,7 @@ export default function SolutionPostPage() {
         setIsAiGenerating(true);
         setAiMessage(null);
         try {
-            const res = await fetch("/api/ai", {
+            const res = await apiFetch("/api/ai", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -191,7 +192,7 @@ export default function SolutionPostPage() {
             const deliverablesList = expectedDeliverables
                 ? expectedDeliverables.split("\n").map((d) => d.trim()).filter(Boolean)
                 : [];
-            const res = await fetch("/api/solutions", {
+            const res = await apiFetch("/api/solutions", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -214,7 +215,8 @@ export default function SolutionPostPage() {
                 const data = await res.json();
                 throw new Error(data.error || "Failed to publish requirement");
             }
-            navigate("/solutions");
+            const saved = await res.json();
+            navigate(`/solutions/${saved.id}`);
         }
         catch (err) {
             console.error("[Post Requirement Error]:", err);

@@ -1,3 +1,4 @@
+import { apiFetch } from "@/lib/api";
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
@@ -29,7 +30,7 @@ export default function SolutionsPage() {
                 if (isClient && user?.id) {
                     queryParams.set("clientId", user.id);
                 }
-                const res = await fetch(`/api/solutions?${queryParams.toString()}`);
+                const res = await apiFetch(`/api/solutions?${queryParams.toString()}`);
                 if (res.ok) {
                     const data = await res.json();
                     if (!cancelled && data.requests) {

@@ -57,6 +57,8 @@ export const STUDENT_LEVELS = {
 };
 export const PLATFORM_COMMISSION = 0.10; // 10%
 export const STUDENT_SIDEBAR_ITEMS = [
+    { label: 'Purchases', href: '/purchases', icon: 'ShoppingBag' },
+    { label: 'My Products', href: '/my-products', icon: 'Package' },
     { label: 'Overview', href: '/dashboard', icon: 'LayoutDashboard' },
     { label: 'My Projects', href: '/projects', icon: 'FolderKanban' },
     { label: 'Tasks', href: '/tasks', icon: 'CheckSquare' },

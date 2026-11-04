@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Code2, Search, Bell, Menu, X, Moon, Sun, ChevronDown, LayoutDashboard, LogIn, UserPlus, Lightbulb, Star, } from "lucide-react";
+import { Code2, Search, Bell, Menu, X, Moon, Sun, ChevronDown, LayoutDashboard, LogIn, UserPlus, Lightbulb, Star, Briefcase, } from "lucide-react";
 import { useTheme } from "@/components/providers/ThemeProvider";
 import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
@@ -23,17 +23,19 @@ export function Navbar() {
     const displayName = user?.name || "Student Developer";
     const navLinks = [
         { href: "/#how-it-works", label: "How It Works", icon: Lightbulb },
-        { href: "/#developers", label: "Developers", icon: Code2 },
-        { href: "/#stories", label: "Success Stories", icon: Star },
+        { href: "/#featured-software", label: "Featured Software", icon: Star },
+        { href: "/#why-campuscode", label: "Why CampusCode", icon: Briefcase },
     ];
     const isDashboard = pathname.startsWith("/dashboard") ||
         pathname.startsWith("/projects") ||
         pathname.startsWith("/contracts") ||
         pathname.startsWith("/messages") ||
         pathname.startsWith("/earnings") ||
+        pathname.startsWith("/purchases") ||
         pathname.startsWith("/settings") ||
         pathname.startsWith("/admin") ||
         pathname.startsWith("/proposals") ||
+        pathname.startsWith("/my-products") ||
         pathname.startsWith("/sell") ||
         pathname.startsWith("/portfolio") ||
         pathname.startsWith("/reviews") ||

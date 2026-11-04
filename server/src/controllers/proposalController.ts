@@ -1,3 +1,5 @@
+import { acceptProposalForClient, ProposalError, validateProposalTerms } from "../services/proposalService.js";
+import { sameId } from "../middleware/access.js";
 import { Response } from "express";
 import { Proposal } from "../models/Proposal.js";
 import { SolutionRequest } from "../models/SolutionRequest.js";
@@ -8,12 +10,13 @@ import mongoose from "mongoose";
 export async function getProposals(req: AuthRequest, res: Response) {
   try {
     const { solutionRequestId, studentId, userId } = req.query;
-    const filter: Record<string, unknown> = {};
+    const owned = await SolutionRequest.find({ clientId: req.user!.id }).select("_id");
+    const filter: Record<string, unknown> = { $or: [{ studentId: req.user!.id }, { solutionRequestId: { $in: owned.map(r => r._id) } }] };
 
     if (solutionRequestId) {
       filter.solutionRequestId = solutionRequestId;
     }
-    const student = studentId || userId;
+    const student = studentId;
     if (student && mongoose.Types.ObjectId.isValid(student as string)) {
       filter.studentId = student;
     }
@@ -23,14 +26,7 @@ export async function getProposals(req: AuthRequest, res: Response) {
       .populate("solutionRequestId")
       .populate("studentId", "name email avatar studentProfile");
 
-    const formatted = proposals.map((p) => {
-      const pJson: any = p.toJSON();
-      if (pJson.studentId && typeof pJson.studentId === "object") {
-        pJson.student = pJson.studentId;
-        pJson.studentId = (pJson.student as { id?: string }).id || pJson.studentId;
-      }
-      return pJson;
-    });
+    const formatted = proposals.map(serializeProposal);
 
     return res.json({ proposals: formatted, total: formatted.length });
   } catch (error) {
@@ -54,13 +50,7 @@ export async function getProposalById(req: AuthRequest, res: Response) {
       return res.status(404).json({ error: "Proposal not found" });
     }
 
-    const pJson: any = proposal.toJSON();
-    if (pJson.studentId && typeof pJson.studentId === "object") {
-      pJson.student = pJson.studentId;
-      pJson.studentId = (pJson.student as { id?: string }).id || pJson.studentId;
-    }
-
-    return res.json(pJson);
+    return res.json(serializeProposal(proposal));
   } catch (error) {
     console.error("[Proposal GetById Error]:", error);
     return res.status(500).json({ error: "Failed to fetch proposal" });
@@ -75,10 +65,20 @@ export async function createProposal(req: AuthRequest, res: Response) {
     }
 
     const { solutionRequestId, content, price, estimatedDelivery, technologies, milestones } = req.body;
-    if (!solutionRequestId || !content || !price) {
+    if (!solutionRequestId || typeof content !== "string" || !content.trim() || content.length > 30000 || typeof price !== "number" || !Number.isFinite(price) || price <= 0) {
       return res.status(400).json({ error: "Solution request, content, and price are required" });
     }
 
+    if (req.user?.role !== "student") return res.status(403).json({ error: "Only students can submit proposals" });
+    if (!mongoose.isValidObjectId(solutionRequestId)) return res.status(404).json({ error: "Requirement not found" });
+    const request = await SolutionRequest.findById(solutionRequestId);
+    if (!request || request.status !== "open") return res.status(409).json({ error: "Requirement is not open" });
+    if (sameId(request.clientId, studentId)) return res.status(400).json({ error: "You cannot bid on your own requirement" });
+    const terms = Array.isArray(milestones) && milestones.length ? milestones : [{ title: "Final delivery", amount: Number(price), durationDays: Number(estimatedDelivery) || 14 }];
+    if (terms.length > 50 || !terms.every(m => m && typeof m.title === "string" && m.title.trim() && Number.isInteger(Number(m.durationDays)) && Number(m.durationDays) > 0)) {
+      return res.status(400).json({ error: "Each milestone needs a title and positive duration" });
+    }
+    validateProposalTerms(Number(price), terms);
     const newProposal = new Proposal({
       solutionRequestId,
       studentId,
@@ -87,19 +87,27 @@ export async function createProposal(req: AuthRequest, res: Response) {
       estimatedDelivery: Number(estimatedDelivery) || 14,
       technologies: Array.isArray(technologies) ? technologies : [],
       status: "pending",
-      milestones: Array.isArray(milestones) && milestones.length > 0 ? milestones : [
-        { title: "Milestone 1: Prototype", description: "Initial functional prototype", amount: Number(price) * 0.5, durationDays: 7 },
-        { title: "Milestone 2: Final Delivery", description: "Complete delivery and source code", amount: Number(price) * 0.5, durationDays: 7 },
-      ],
+      milestones: terms,
     });
 
-    await newProposal.save();
-
-    // Increment proposal count on solution request
-    await SolutionRequest.findByIdAndUpdate(solutionRequestId, { $inc: { proposalCount: 1 } });
-
-    return res.status(201).json(newProposal.toJSON());
+    let savedProposal = newProposal;
+    await Proposal.init();
+    const session = await mongoose.startSession();
+    try {
+      await session.withTransaction(async () => {
+        const existing = await Proposal.exists({ solutionRequestId, studentId }).session(session);
+        if (existing) throw new ProposalError(409, "You already submitted a proposal for this requirement");
+        const open = await SolutionRequest.findOneAndUpdate({ _id: solutionRequestId, status: "open" }, { $inc: { proposalCount: 1 } }, { session, new: true });
+        if (!open) throw new ProposalError(409, "Requirement is no longer open");
+        newProposal.set("submissionKey", String(solutionRequestId) + ":" + studentId);
+        const [created] = await Proposal.create([newProposal.toObject()], { session });
+        savedProposal = created;
+      });
+    } finally { await session.endSession(); }
+    return res.status(201).json(serializeProposal(savedProposal));
   } catch (error) {
+    if ((error as {code?: number}).code === 11000) return res.status(409).json({ error: "You already submitted a proposal for this requirement" });
+    if (error instanceof ProposalError) return res.status(error.status).json({ error: error.message });
     console.error("[Proposal Create Error]:", error);
     return res.status(500).json({ error: "Failed to submit proposal" });
   }
@@ -107,48 +115,19 @@ export async function createProposal(req: AuthRequest, res: Response) {
 
 export async function acceptProposal(req: AuthRequest, res: Response) {
   try {
-    const { id } = req.params;
-    const proposal = await Proposal.findById(id).populate("solutionRequestId");
-    if (!proposal) {
-      return res.status(404).json({ error: "Proposal not found" });
-    }
-
-    proposal.status = "accepted";
-    await proposal.save();
-
-    const solReq = proposal.solutionRequestId as unknown as { _id: string; clientId: string; title: string };
-
-    // Create a new active contract
-    const totalAmount = proposal.price;
-    const platformFee = totalAmount * 0.1; // 10%
-    const studentEarnings = totalAmount - platformFee;
-
-    const contract = new Contract({
-      solutionRequestId: solReq._id,
-      proposalId: proposal._id,
-      studentId: proposal.studentId,
-      clientId: solReq.clientId || req.user?.id,
-      totalAmount,
-      platformFee,
-      studentEarnings,
-      status: "active",
-      milestones: proposal.milestones.map((m) => ({
-        title: m.title,
-        description: m.description,
-        amount: m.amount,
-        status: "pending",
-      })),
-    });
-
-    await contract.save();
-
-    // Mark Solution Request as in_progress
-    await SolutionRequest.findByIdAndUpdate(solReq._id, { status: "in_progress" });
-
-    return res.json({ success: true, contract: contract.toJSON(), proposal: proposal.toJSON() });
+    const result = await acceptProposalForClient(req.params.id, req.user!.id);
+    if (!result) return res.status(500).json({ error: "Acceptance did not complete" });
+    return res.json({ success: true, contractId: result.contract.id, contract: result.contract.toJSON(), proposal: result.proposal.toJSON() });
   } catch (error) {
-    console.error("[Proposal Accept Error]:", error);
-    return res.status(500).json({ error: "Failed to accept proposal" });
+    if (error instanceof ProposalError) return res.status(error.status).json({ error: error.message });
+    console.error("[Proposal Accept Error]", error);
+    return res.status(503).json({ error: "Could not accept proposal atomically. Please retry; MongoDB transactions must be available." });
   }
 }
 
+export function serializeProposal(proposal: any) {
+  const data = proposal.toJSON();
+  if (data.studentId?.name) { data.student = data.studentId; data.studentId = data.student.id || String(data.student._id); }
+  if (data.solutionRequestId?.title) { data.solutionRequest = data.solutionRequestId; data.solutionRequestId = data.solutionRequest.id || String(data.solutionRequest._id); }
+  return data;
+}

@@ -1,34 +1,26 @@
+import DemoCheckout from "@/components/shared/DemoCheckout";
+import { apiFetch } from "@/lib/api";
 import { useState, useEffect } from "react";
 import { Link, useParams } from "react-router-dom";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { Star, CheckCircle2, Code2, ArrowLeft, Download, Loader2, Cloud, X, CreditCard, Smartphone, Copy, ExternalLink, } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
-import { Input } from "@/components/ui/input";
 import { formatCurrency } from "@/lib/utils";
 export function MarketplaceDetailPage() {
-    const { product: productId } = useParams();
+    const { id: productId } = useParams();
     const [product, setProduct] = useState(null);
     const [loading, setLoading] = useState(true);
     const [selectedScreenshotIndex, setSelectedScreenshotIndex] = useState(0);
     // Checkout & Download State
     const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
-    const [paymentMethod, setPaymentMethod] = useState("upi");
-    const [upiId, setUpiId] = useState("");
-    const [cardNumber, setCardNumber] = useState("");
-    const [cardExpiry, setCardExpiry] = useState("");
-    const [cardCvv, setCardCvv] = useState("");
-    const [isProcessingOrder, setIsProcessingOrder] = useState(false);
-    const [orderComplete, setOrderComplete] = useState(false);
-    const [licenseKey, setLicenseKey] = useState("");
-    const [copiedKey, setCopiedKey] = useState(false);
     useEffect(() => {
         let cancelled = false;
         async function loadProduct() {
             try {
-                const res = await fetch(`/api/products/${productId}`);
+                const res = await apiFetch(`/api/products/${productId}`);
                 if (res.ok) {
                     const data = await res.json();
                     if (!cancelled && data && !data.error) {
@@ -52,61 +44,6 @@ export function MarketplaceDetailPage() {
             cancelled = true;
         };
     }, [productId]);
-    const triggerImmediateDownload = (prod) => {
-        if (prod.driveUrl) {
-            window.open(prod.driveUrl, "_blank");
-        }
-        if (prod.githubUrl && !prod.driveUrl) {
-            window.open(prod.githubUrl, "_blank");
-        }
-        try {
-            const readmeContent = `# ${prod.name}\n\n${prod.description}\n\n## License\n${prod.license} License\n\n## Documentation\n${prod.documentation || "Complete source code package instructions for CampusCode."}\n\nThank you for supporting student developers on CampusCode!`;
-            const blob = new Blob([readmeContent], { type: "text/markdown;charset=utf-8" });
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement("a");
-            link.href = url;
-            link.download = `${(prod.slug || prod.name).toLowerCase().replace(/[^a-z0-9]+/g, "-")}-package.md`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            URL.revokeObjectURL(url);
-        }
-        catch (err) {
-            console.error("Failed to trigger local file download:", err);
-        }
-    };
-    const handlePurchaseOrFree = async () => {
-        setIsProcessingOrder(true);
-        try {
-            if (!product?.isFree) {
-                await fetch("/api/payments/order", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        amount: product?.price || 499,
-                        productId: product?.id,
-                    }),
-                }).catch((e) => console.error("Payment API:", e));
-            }
-            const key = `CC-${Math.random().toString(36).slice(2, 6).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
-            setLicenseKey(key);
-            if (product) {
-                setProduct((prev) => (prev ? { ...prev, salesCount: (prev.salesCount || 0) + 1 } : prev));
-            }
-            setOrderComplete(true);
-            if (product) {
-                setTimeout(() => {
-                    triggerImmediateDownload(product);
-                }, 500);
-            }
-        }
-        catch (err) {
-            console.error("Order processing error:", err);
-        }
-        finally {
-            setIsProcessingOrder(false);
-        }
-    };
     if (loading) {
         return (<div className="flex items-center justify-center min-h-[50vh]">
         <Loader2 className="h-8 w-8 animate-spin text-[var(--primary)]"/>
@@ -167,7 +104,7 @@ export function MarketplaceDetailPage() {
                 <div className="flex items-center gap-3 flex-wrap">
                   <div className="flex items-center gap-1">
                     <Star className="h-4 w-4 fill-amber-400 text-amber-400"/>
-                    <span className="font-semibold text-sm">{product.rating}</span>
+                    <span className="font-semibold text-sm">{product.reviewCount ? product.rating : "No reviews yet"}</span>
                     <span className="text-sm text-[var(--muted-foreground)]">({product.reviewCount || 0} reviews)</span>
                   </div>
                   <span className="text-sm text-[var(--muted-foreground)]">{(product.salesCount || 0).toLocaleString()} sales</span>
@@ -249,18 +186,17 @@ export function MarketplaceDetailPage() {
                   {product.isFree || product.price === 0 ? "Free" : formatCurrency(product.price)}
                 </p>
                 <p className="text-xs text-[var(--muted-foreground)]">
-                  Instant source code package + lifetime access
+                  Seller delivery links saved with your purchase
                 </p>
               </div>
 
               <Button className="w-full gap-2 text-base font-semibold py-6 shadow-md hover:shadow-xl transition-all cursor-pointer" size="lg" onClick={() => {
-            setOrderComplete(false);
             setIsCheckoutOpen(true);
         }}>
                 {product.isFree || product.price === 0 ? (<>
                     <Download className="h-5 w-5"/> Download Free Package
                   </>) : (<>
-                    <Download className="h-5 w-5"/> Buy & Download Now
+                    <Download className="h-5 w-5"/> Try Demo Checkout
                   </>)}
               </Button>
 
@@ -288,76 +224,7 @@ export function MarketplaceDetailPage() {
         </div>
       </div>
 
-      {/* Checkout Modal */}
-      <AnimatePresence>
-        {isCheckoutOpen && (<div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setIsCheckoutOpen(false)}/>
-            <motion.div initial={{ opacity: 0, scale: 0.95, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 10 }} className="relative z-10 w-full max-w-md bg-[var(--card)] border border-[var(--border)] rounded-2xl p-6 shadow-2xl overflow-hidden">
-              <button onClick={() => setIsCheckoutOpen(false)} className="absolute top-4 right-4 p-1.5 rounded-lg text-[var(--muted-foreground)] hover:text-[var(--foreground)]">
-                <X className="h-4 w-4"/>
-              </button>
-
-              {!orderComplete ? (<div className="space-y-4">
-                  <h3 className="text-lg font-bold">
-                    {product.isFree ? "Confirm Download" : "Complete Purchase"}
-                  </h3>
-                  <p className="text-xs text-[var(--muted-foreground)]">
-                    {product.name} — {product.isFree ? "Free" : formatCurrency(product.price)}
-                  </p>
-
-                  {!product.isFree && (<div className="space-y-3 pt-2">
-                      <div className="flex gap-2">
-                        <Button type="button" variant={paymentMethod === "upi" ? "default" : "outline"} size="sm" className="flex-1 gap-1.5 text-xs" onClick={() => setPaymentMethod("upi")}>
-                          <Smartphone className="h-4 w-4"/> UPI
-                        </Button>
-                        <Button type="button" variant={paymentMethod === "card" ? "default" : "outline"} size="sm" className="flex-1 gap-1.5 text-xs" onClick={() => setPaymentMethod("card")}>
-                          <CreditCard className="h-4 w-4"/> Card
-                        </Button>
-                      </div>
-
-                      {paymentMethod === "upi" ? (<div>
-                          <label className="text-xs font-medium text-[var(--muted-foreground)] mb-1 block">UPI ID</label>
-                          <Input placeholder="username@okhdfcbank" value={upiId} onChange={(e) => setUpiId(e.target.value)}/>
-                        </div>) : (<div className="space-y-2">
-                          <div>
-                            <label className="text-xs font-medium text-[var(--muted-foreground)] mb-1 block">Card Number</label>
-                            <Input placeholder="4532 •••• •••• 8821" value={cardNumber} onChange={(e) => setCardNumber(e.target.value)}/>
-                          </div>
-                          <div className="grid grid-cols-2 gap-2">
-                            <Input placeholder="MM/YY" value={cardExpiry} onChange={(e) => setCardExpiry(e.target.value)}/>
-                            <Input placeholder="CVV" value={cardCvv} onChange={(e) => setCardCvv(e.target.value)}/>
-                          </div>
-                        </div>)}
-                    </div>)}
-
-                  <Button onClick={handlePurchaseOrFree} disabled={isProcessingOrder} className="w-full mt-4 cursor-pointer gap-2" size="lg">
-                    {isProcessingOrder ? (<>
-                        <Loader2 className="h-4 w-4 animate-spin"/> Processing...
-                      </>) : product.isFree ? ("Download Now") : (`Pay ${formatCurrency(product.price)} & Download`)}
-                  </Button>
-                </div>) : (<div className="text-center py-6 space-y-4">
-                  <CheckCircle2 className="h-14 w-14 text-emerald-500 mx-auto"/>
-                  <h3 className="text-xl font-bold">Order Completed!</h3>
-                  <p className="text-xs text-[var(--muted-foreground)] max-w-xs mx-auto">
-                    Your download has started. Save your verified license key below:
-                  </p>
-                  <div className="flex items-center justify-between p-3 rounded-lg bg-[var(--muted)] text-xs font-mono">
-                    <span>{licenseKey}</span>
-                    <button onClick={() => {
-                    navigator.clipboard.writeText(licenseKey);
-                    setCopiedKey(true);
-                    setTimeout(() => setCopiedKey(false), 2000);
-                }} className="text-[var(--primary)] cursor-pointer">
-                      {copiedKey ? "Copied!" : <Copy className="h-3.5 w-3.5"/>}
-                    </button>
-                  </div>
-                  <Button onClick={() => setIsCheckoutOpen(false)} className="w-full">
-                    Done
-                  </Button>
-                </div>)}
-            </motion.div>
-          </div>)}
-      </AnimatePresence>
+      {isCheckoutOpen && <DemoCheckout product={product} onClose={() => setIsCheckoutOpen(false)} />}
     </div>);
 }
 export default MarketplaceDetailPage;

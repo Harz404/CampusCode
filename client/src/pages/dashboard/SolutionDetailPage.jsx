@@ -1,3 +1,4 @@
+import { apiFetch, apiJson } from "@/lib/api";
 import { useState, useEffect } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
@@ -29,6 +30,7 @@ export default function SolutionDetailPage() {
     const [isAiGeneratingPitch, setIsAiGeneratingPitch] = useState(false);
     const [aiSuccessMessage, setAiSuccessMessage] = useState(null);
     const [submitError, setSubmitError] = useState("");
+    const ownProposal = request?.proposals?.find(proposal => proposal.studentId === user?.id);
     const [submitSuccess, setSubmitSuccess] = useState(false);
     const handleAiGeneratePitch = async () => {
         if (!request)
@@ -36,7 +38,7 @@ export default function SolutionDetailPage() {
         setIsAiGeneratingPitch(true);
         setAiSuccessMessage(null);
         try {
-            const res = await fetch("/api/ai", {
+            const res = await apiFetch("/api/ai", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -75,7 +77,7 @@ export default function SolutionDetailPage() {
         let cancelled = false;
         async function loadRequirement() {
             try {
-                const res = await fetch(`/api/solutions/${id}`);
+                const res = await apiFetch(`/api/solutions/${id}`);
                 if (res.ok) {
                     const data = await res.json();
                     if (!cancelled && data) {
@@ -151,10 +153,12 @@ export default function SolutionDetailPage() {
             setSubmitError("Please enter a valid proposal price.");
             return;
         }
+        if (ownProposal) { setSubmitError("You already submitted a proposal. View it in My Proposals."); return; }
+        if (Math.round(totalMilestonesAmount * 100) !== Math.round(price * 100)) { setSubmitError("Milestone amounts must add up to the proposal price."); return; }
         setSubmitting(true);
         setSubmitError("");
         try {
-            const res = await fetch("/api/proposals", {
+            const res = await apiFetch("/api/proposals", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -174,6 +178,8 @@ export default function SolutionDetailPage() {
                 const data = await res.json();
                 throw new Error(data.error || "Failed to submit proposal");
             }
+            const saved = await res.json();
+            setRequest(previous => ({ ...previous, proposals: [...(previous.proposals || []), saved], proposalCount: (previous.proposalCount || 0) + 1 }));
             setSubmitSuccess(true);
         }
         catch (err) {
@@ -187,7 +193,7 @@ export default function SolutionDetailPage() {
     const handleAcceptProposal = async (proposalId) => {
         setAcceptingId(proposalId);
         try {
-            const res = await fetch(`/api/proposals/${proposalId}/accept`, {
+            const res = await apiFetch(`/api/proposals/${proposalId}/accept`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
             });
@@ -197,11 +203,11 @@ export default function SolutionDetailPage() {
             }
             else {
                 const err = await res.json();
-                alert(err.error || "Failed to accept proposal");
+                setSubmitError(err.error || "Failed to accept proposal");
             }
         }
         catch (err) {
-            console.error("Accept proposal error:", err);
+            setSubmitError(err.message || "Could not accept proposal");
         }
         finally {
             setAcceptingId(null);
@@ -210,7 +216,7 @@ export default function SolutionDetailPage() {
     const handleMessageStudent = async (studentId, proposalId) => {
         setMessagingId(proposalId);
         try {
-            const res = await fetch("/api/messages/conversations", {
+            const res = await apiFetch("/api/messages/conversations", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -257,12 +263,14 @@ export default function SolutionDetailPage() {
         ? incomingProposals.find((p) => p.studentId === user.id || p.student?.id === user.id)
         : null;
     return (<div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto">
+      {submitError && <p role="alert" className="text-red-500 text-sm mb-4">{submitError}</p>}
+      {ownProposal && <p className="text-sm mb-4">Your proposal is {ownProposal.status}. <Link className="underline" to={`/proposals/${ownProposal.id}`}>View proposal</Link></p>}
       <AnimatePresence mode="wait">
         {!isSubmittingMode ? (<motion.div key="overview" initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -16 }} transition={{ duration: 0.2 }}>
             {/* Top Breadcrumb */}
             <Link to="/solutions" className="inline-flex items-center gap-1.5 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] mb-6 transition-colors">
               <ArrowLeft className="h-4 w-4"/>
-              {isOwner || isClient ? "Back to My Requirements" : "Back to Solution Requests"}
+              {isOwner ? "Back to My Requirements" : "Back to Solution Requests"}
             </Link>
 
             <div className="grid lg:grid-cols-3 gap-8 items-start">
@@ -272,11 +280,11 @@ export default function SolutionDetailPage() {
                 <div>
                   <div className="flex items-center gap-2 mb-3 flex-wrap">
                     <Badge variant={typeof request.status === "string" && request.status.toLowerCase() === "open" ? "success" : "warning"}>
-                      {typeof request.status === "string" && request.status.toLowerCase() === "open" ? "Open" : "In Progress"}
+                      {request.status?.replaceAll("_", " ")}
                     </Badge>
                     <Badge variant="outline">{request.difficulty}</Badge>
                     <Badge variant="outline">{request.solutionType?.replace("_", " / ").toUpperCase()}</Badge>
-                    {(isOwner || isClient) && (<Badge className="bg-[var(--primary)]/10 text-[var(--primary)] border-[var(--primary)]/20">
+                    {(isOwner) && (<Badge className="bg-[var(--primary)]/10 text-[var(--primary)] border-[var(--primary)]/20">
                         Owner View
                       </Badge>)}
                   </div>
@@ -447,7 +455,7 @@ export default function SolutionDetailPage() {
                   </div>)}
 
                 {/* Incoming Proposals Section (For Client / Owner) */}
-                {(isOwner || isClient) && (<div className="space-y-4 pt-4 border-t border-[var(--border)]">
+                {(isOwner) && (<div className="space-y-4 pt-4 border-t border-[var(--border)]">
                     <div className="flex items-center justify-between">
                       <div>
                         <h2 className="text-xl font-bold">
@@ -477,7 +485,7 @@ export default function SolutionDetailPage() {
                                           </Badge>)}
                                       </div>
                                       <p className="text-xs text-[var(--muted-foreground)]">
-                                        {student?.studentProfile?.college || "Verified Student Developer"}
+                                        {student?.studentProfile?.college || "Student developer"}
                                         {student?.studentProfile?.rating ? ` • ⭐ ${student.studentProfile.rating}` : ""}
                                       </p>
                                     </div>
@@ -539,7 +547,7 @@ export default function SolutionDetailPage() {
                                           <CheckCircle2 className="h-3.5 w-3.5"/>
                                           View Active Contract
                                         </Button>
-                                      </Link>) : (<Button size="sm" className="gap-1.5 cursor-pointer" disabled={acceptingId === proposal.id} onClick={() => handleAcceptProposal(proposal.id)}>
+                                      </Link>) : (<Button size="sm" className="gap-1.5 cursor-pointer" disabled={!!acceptingId || request.status !== "open" || proposal.status !== "pending"} onClick={() => handleAcceptProposal(proposal.id)}>
                                         {acceptingId === proposal.id ? (<Loader2 className="h-3.5 w-3.5 animate-spin"/>) : (<CheckCircle2 className="h-3.5 w-3.5"/>)}
                                         Accept & Start Contract
                                       </Button>)}
@@ -595,7 +603,7 @@ export default function SolutionDetailPage() {
                       </div>
                     </div>
 
-                    {isOwner || isClient ? (<div className="space-y-2 pt-2 border-t border-[var(--border)]">
+                    {isOwner ? (<div className="space-y-2 pt-2 border-t border-[var(--border)]">
                         <p className="text-xs text-[var(--muted-foreground)]">
                           You are viewing your posted requirement. Review developer proposals on the left.
                         </p>
@@ -626,7 +634,7 @@ export default function SolutionDetailPage() {
                             <MessageSquare className="h-4 w-4"/>
                             Message Client
                           </Button>)}
-                      </div>) : (<Button className="w-full gap-2 shadow-md hover:shadow-lg transition-all cursor-pointer" size="lg" onClick={() => setIsSubmittingMode(true)}>
+                      </div>) : (<Button className="w-full gap-2 shadow-md hover:shadow-lg transition-all cursor-pointer" size="lg" disabled={isClient || !!ownProposal || request.status !== "open"} onClick={() => setIsSubmittingMode(true)}>
                         <Send className="h-4 w-4"/>
                         Submit Proposal
                       </Button>)}
@@ -657,13 +665,13 @@ export default function SolutionDetailPage() {
                       <div className="grid grid-cols-2 gap-2 text-center pt-3 border-t border-[var(--border)] text-xs">
                         <div>
                           <p className="font-bold text-sm text-[var(--foreground)]">
-                            {request.client.clientProfile?.projectsPosted || 5}
+                            {request.client.clientProfile?.projectsPosted || 0}
                           </p>
                           <p className="text-[var(--muted-foreground)]">Posted</p>
                         </div>
                         <div>
                           <p className="font-bold text-sm text-[var(--foreground)]">
-                            ⭐ {request.client.clientProfile?.rating || 4.9}
+                            ⭐ {request.client.clientProfile?.rating || 0}
                           </p>
                           <p className="text-[var(--muted-foreground)]">Rating</p>
                         </div>

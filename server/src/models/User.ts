@@ -43,6 +43,7 @@ export interface IUser extends Document {
   name: string;
   email: string;
   password?: string;
+  authVersion: number;
   avatar?: string;
   role: "student" | "client" | "admin";
   isVerified: boolean;
@@ -107,9 +108,10 @@ const UserSchema = new Schema<IUser>(
     name: { type: String, required: true, trim: true },
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     password: { type: String },
+    authVersion: { type: Number, default: 0 },
     avatar: { type: String, default: "" },
     role: { type: String, enum: ["student", "client", "admin"], default: "student" },
-    isVerified: { type: Boolean, default: true },
+    isVerified: { type: Boolean, default: false },
     githubUsername: { type: String },
     githubAccessToken: { type: String },
     studentProfile: StudentProfileSchema,
@@ -124,6 +126,8 @@ const UserSchema = new Schema<IUser>(
         delete ret._id;
         delete ret.__v;
         delete ret.password;
+        delete ret.authVersion;
+        delete ret.githubAccessToken;
         return ret;
       },
     },

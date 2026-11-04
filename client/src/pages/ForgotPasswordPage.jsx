@@ -1,3 +1,4 @@
+import { apiJson } from "@/lib/api";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
@@ -8,6 +9,13 @@ import { Input } from "@/components/ui/input";
 export function ForgotPasswordPage() {
     const [email, setEmail] = useState("");
     const [sent, setSent] = useState(false);
+    const [busy, setBusy] = useState(false);
+    const [error, setError] = useState("");
+    const send = async event => {
+        event.preventDefault(); if (busy) return; setBusy(true); setError("");
+        try { await apiJson("/api/auth/forgot-password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email }) }); setSent(true); }
+        catch (error) { setError(error.message); } finally { setBusy(false); }
+    };
     return (<div className="min-h-screen flex">
       {/* Left Panel */}
       <div className="hidden lg:flex flex-1 bg-gradient-to-br from-[var(--primary)] via-purple-600 to-cyan-500 items-center justify-center p-12">
@@ -36,15 +44,16 @@ export function ForgotPasswordPage() {
                   No worries, enter your email and we'll send you reset instructions.
                 </p>
 
-                <div className="space-y-4">
+                {error && <p role="alert" className="text-sm text-red-500 mb-4">{error}</p>}
+                <form onSubmit={send} className="space-y-4">
                   <div>
                     <label className="mb-1.5 block text-xs font-medium text-[var(--muted-foreground)]">Email Address</label>
-                    <Input type="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)}/>
+                    <Input type="email" required disabled={busy} placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)}/>
                   </div>
-                  <Button className="w-full cursor-pointer" size="lg" onClick={() => setSent(true)}>
+                  <Button className="w-full cursor-pointer" size="lg" type="submit" disabled={busy}>
                     Send Reset Link
                   </Button>
-                </div>
+                </form>
 
                 <p className="text-center text-sm text-[var(--muted-foreground)] mt-6">
                   Remember your password?{" "}
@@ -60,7 +69,7 @@ export function ForgotPasswordPage() {
                 </div>
                 <h2 className="text-2xl font-bold mb-2">Check your email</h2>
                 <p className="text-[var(--muted-foreground)] text-sm mb-2">
-                  We sent a password reset link to
+                  If an account exists for this address, a reset link will be emailed shortly:
                 </p>
                 <p className="font-semibold mb-6">{email}</p>
                 <Button variant="outline" className="w-full cursor-pointer" onClick={() => setSent(false)}>

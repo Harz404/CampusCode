@@ -1,3 +1,4 @@
+import { apiFetch } from "@/lib/api";
 import { useState, useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { motion } from "framer-motion";
@@ -19,7 +20,7 @@ export default function ProposalDetailPage() {
     useEffect(() => {
         async function loadProposal() {
             try {
-                const res = await fetch(`/api/proposals/${id}`);
+                const res = await apiFetch(`/api/proposals/${id}`);
                 if (res.ok) {
                     const data = await res.json();
                     setProposal(data);
@@ -74,7 +75,7 @@ export default function ProposalDetailPage() {
                 const otherUserId = isClient ? proposal.studentId : request?.clientId;
                 setMessagingLoading(true);
                 try {
-                    const res = await fetch("/api/messages/conversations", {
+                    const res = await apiFetch("/api/messages/conversations", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({

@@ -41,6 +41,9 @@ export interface IProduct extends Document {
   documentation?: string;
   installation?: string;
   screenshots: string[];
+  moderationReason?: string;
+  moderationVerified: boolean;
+  moderationHistory: { status: string; reason: string; actorId: mongoose.Types.ObjectId; createdAt: Date }[];
   qualityScore?: IProductQualityScore;
   rating: number;
   reviewCount: number;
@@ -65,8 +68,11 @@ const ProductSchema = new Schema<IProduct>(
     status: {
       type: String,
       enum: ["draft", "pending_review", "published", "rejected", "archived"],
-      default: "published",
+      default: "draft",
     },
+    moderationReason: { type: String, default: "" },
+    moderationVerified: { type: Boolean, default: false },
+    moderationHistory: [{ status: String, reason: String, actorId: { type: Schema.Types.ObjectId, ref: "User" }, createdAt: { type: Date, default: Date.now } }],
     sellerId: { type: Schema.Types.ObjectId, ref: "User", required: true },
     projectId: { type: Schema.Types.ObjectId, ref: "Project" },
     technologies: { type: [String], default: [] },
@@ -82,14 +88,14 @@ const ProductSchema = new Schema<IProduct>(
     installation: { type: String },
     screenshots: { type: [String], default: [] },
     qualityScore: {
-      documentation: { type: Number, default: 90 },
-      codeQuality: { type: Number, default: 95 },
-      demoAvailability: { type: Number, default: 90 },
-      readme: { type: Number, default: 92 },
-      testing: { type: Number, default: 85 },
-      overall: { type: Number, default: 90 },
+      documentation: { type: Number, default: undefined },
+      codeQuality: { type: Number, default: undefined },
+      demoAvailability: { type: Number, default: undefined },
+      readme: { type: Number, default: undefined },
+      testing: { type: Number, default: undefined },
+      overall: { type: Number, default: undefined },
     },
-    rating: { type: Number, default: 5.0 },
+    rating: { type: Number, default: 0 },
     reviewCount: { type: Number, default: 0 },
     salesCount: { type: Number, default: 0 },
     viewCount: { type: Number, default: 0 },

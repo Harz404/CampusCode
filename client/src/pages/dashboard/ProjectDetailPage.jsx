@@ -1,3 +1,4 @@
+import { apiFetch, apiJson } from "@/lib/api";
 import { useState, useEffect } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
@@ -14,6 +15,8 @@ function normaliseTasks(tasks) {
         ...task,
         status: task.status.toLowerCase(),
         priority: task.priority.toLowerCase(),
+        subtasks: task.subtasks || [],
+        comments: task.comments || [],
     }));
 }
 function issueUrl(repository, labels) {
@@ -50,7 +53,7 @@ export default function ProjectDetailPage() {
         let cancelled = false;
         async function loadProject() {
             try {
-                const res = await fetch(`/api/projects/${id}`);
+                const res = await apiFetch(`/api/projects/${id}`);
                 if (res.ok) {
                     const data = await res.json();
                     if (!cancelled && data && !data.error) {
@@ -100,7 +103,7 @@ export default function ProjectDetailPage() {
     useEffect(() => {
         if (!id)
             return;
-        fetch(`/api/projects/${id}/github/repositories`)
+        apiFetch(`/api/projects/${id}/github/repositories`)
             .then((res) => res.ok ? res.json() : null)
             .then((data) => {
             if (!data)
@@ -115,7 +118,7 @@ export default function ProjectDetailPage() {
             return;
         const interval = window.setInterval(async () => {
             try {
-                const res = await fetch(`/api/projects/${id}`);
+                const res = await apiFetch(`/api/projects/${id}`);
                 if (!res.ok)
                     return;
                 const data = await res.json();
@@ -129,114 +132,54 @@ export default function ProjectDetailPage() {
         }, 15000);
         return () => window.clearInterval(interval);
     }, [id, project?.githubRepo]);
-    const handleTaskStatusChange = async (taskId, newStatus) => {
-        const nextTasks = tasks.map((task) => task.id === taskId ? { ...task, status: newStatus } : task);
-        const nextProgress = nextTasks.length
-            ? Math.round((nextTasks.filter((task) => task.status === "done").length / nextTasks.length) * 100)
-            : 0;
-        setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, status: newStatus } : t)));
-        setProject((previous) => previous ? { ...previous, progress: nextProgress } : previous);
-        if (selectedTaskForModal && selectedTaskForModal.id === taskId) {
-            setSelectedTaskForModal((prev) => (prev ? { ...prev, status: newStatus } : prev));
-        }
+    const [taskSaving, setTaskSaving] = useState(false);
+    const refreshWorkspace = async () => {
+        const data = await apiJson(`/api/projects/${id}`);
+        const normalized = normaliseTasks(data.tasks || []);
+        setProject({ ...data, tasks: normalized });
+        setTasks(normalized);
+        setSelectedTaskForModal(previous => previous ? normalized.find(task => task.id === previous.id) || null : null);
+    };
+    const mutateTask = async (url, options) => {
+        if (taskSaving) return false;
+        setTaskSaving(true);
+        setWorkspaceMessage(null);
         try {
-            await fetch(`/api/projects/${id}/tasks`, {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ taskId, status: newStatus }),
-            });
-            await fetch(`/api/projects/${id}`, {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ progress: nextProgress }),
-            });
-        }
-        catch (err) {
-            console.error("Failed to update task status:", err);
-        }
+            await apiJson(url, options);
+            await refreshWorkspace();
+            return true;
+        } catch (error) {
+            setWorkspaceMessage(error.message || "Could not save task changes");
+            return false;
+        } finally { setTaskSaving(false); }
+    };
+    const handleTaskStatusChange = async (taskId, newStatus) => {
+        await mutateTask(`/api/projects/${id}/tasks/${taskId}`, {
+            method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: newStatus }),
+        });
     };
     const handleCreateTask = async (e) => {
         e.preventDefault();
-        if (!newTaskTitle.trim() || !id)
-            return;
-        const labelArray = newTaskLabels
-            .split(",")
-            .map((l) => l.trim())
-            .filter(Boolean);
-        const subtaskArray = newTaskSubtasks
-            .split("\n")
-            .map((s) => s.trim())
-            .filter(Boolean)
-            .map((title, i) => ({ id: `st_${Date.now()}_${i}`, title, completed: false }));
-        const newTaskItem = {
-            id: `task_${Date.now()}`,
-            projectId: id,
-            title: newTaskTitle.trim(),
-            description: newTaskDescription.trim(),
-            status: newTaskStatus,
-            priority: newTaskPriority,
-            labels: labelArray.length > 0 ? labelArray : ["feature"],
-            subtasks: subtaskArray,
-            comments: [],
-            attachments: [],
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-        };
-        setTasks((prev) => [newTaskItem, ...prev]);
-        setIsAddTaskOpen(false);
-        setNewTaskTitle("");
-        setNewTaskDescription("");
-        setNewTaskSubtasks("");
-        try {
-            await fetch(`/api/projects/${id}/tasks`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(newTaskItem),
-            });
-        }
-        catch (err) {
-            console.error("Failed to create task via API:", err);
-        }
+        if (!newTaskTitle.trim() || !id) return;
+        const saved = await mutateTask(`/api/projects/${id}/tasks`, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ title: newTaskTitle.trim(), description: newTaskDescription.trim(), status: newTaskStatus,
+                priority: newTaskPriority, labels: newTaskLabels.split(",").map(label => label.trim()).filter(Boolean),
+                subtasks: newTaskSubtasks.split("\n").map(title => title.trim()).filter(Boolean).map(title => ({ title, completed: false })),
+            }),
+        });
+        if (saved) { setIsAddTaskOpen(false); setNewTaskTitle(""); setNewTaskDescription(""); setNewTaskSubtasks(""); }
     };
-    const handleToggleSubtask = (taskId, subtaskIndex) => {
-        setTasks((prev) => prev.map((t) => {
-            if (t.id !== taskId)
-                return t;
-            const updatedSubtasks = [...t.subtasks];
-            if (updatedSubtasks[subtaskIndex]) {
-                updatedSubtasks[subtaskIndex] = {
-                    ...updatedSubtasks[subtaskIndex],
-                    completed: !updatedSubtasks[subtaskIndex].completed,
-                };
-            }
-            return { ...t, subtasks: updatedSubtasks };
-        }));
-        if (selectedTaskForModal && selectedTaskForModal.id === taskId) {
-            setSelectedTaskForModal((prev) => {
-                if (!prev)
-                    return prev;
-                const updated = [...prev.subtasks];
-                if (updated[subtaskIndex]) {
-                    updated[subtaskIndex] = {
-                        ...updated[subtaskIndex],
-                        completed: !updated[subtaskIndex].completed,
-                    };
-                }
-                return { ...prev, subtasks: updated };
-            });
-        }
+    const handleToggleSubtask = async (taskId, subtaskIndex) => {
+        const task = tasks.find(item => item.id === taskId);
+        if (!task) return;
+        const subtasks = task.subtasks.map((item, index) => ({ title: item.title, completed: index === subtaskIndex ? !item.completed : item.completed }));
+        await mutateTask(`/api/projects/${id}/tasks/${taskId}`, {
+            method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ subtasks }),
+        });
     };
     const handleDeleteTask = async (taskId) => {
-        setTasks((prev) => prev.filter((t) => t.id !== taskId));
-        setSelectedTaskForModal(null);
-        try {
-            await fetch(`/api/projects/${id}/tasks?taskId=${taskId}`, {
-                method: "DELETE",
-            });
-        }
-        catch (err) {
-            console.error("Failed to delete task:", err);
-        }
+        await mutateTask(`/api/projects/${id}/tasks/${taskId}`, { method: "DELETE" });
     };
     const completedTasks = tasks.filter((task) => task.status === "done").length;
     const taskProgress = tasks.length ? Math.round((completedTasks / tasks.length) * 100) : 0;
@@ -248,7 +191,7 @@ export default function ProjectDetailPage() {
         setIsSavingWorkspace(true);
         setWorkspaceMessage(null);
         try {
-            const res = await fetch(`/api/projects/${id}`, {
+            const res = await apiFetch(`/api/projects/${id}`, {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(updates),
@@ -276,7 +219,7 @@ export default function ProjectDetailPage() {
             setWorkspaceMessage("Finish every task before completing this project.");
             return;
         }
-        await saveWorkspace({ status: "completed", progress: 100 });
+        await saveWorkspace({ status: "completed" });
     };
     const syncGitHubIssues = async () => {
         if (!id)
@@ -285,8 +228,8 @@ export default function ProjectDetailPage() {
         setWorkspaceMessage(null);
         try {
             const [res] = await Promise.all([
-                fetch(`/api/projects/${id}/github/sync`, { method: "POST" }),
-                fetch(`/api/projects/${id}/github/kanban-log`, { method: "POST" }).catch(() => null),
+                apiFetch(`/api/projects/${id}/github/sync`, { method: "POST" }),
+                apiFetch(`/api/projects/${id}/github/kanban-log`, { method: "POST" }).catch(() => null),
             ]);
             const data = await res.json();
             if (!res.ok)
@@ -310,7 +253,7 @@ export default function ProjectDetailPage() {
         setIsSavingWorkspace(true);
         setWorkspaceMessage(null);
         try {
-            const res = await fetch(`/api/projects/${id}/github/repository`, {
+            const res = await apiFetch(`/api/projects/${id}/github/repository`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ fullName: githubRepo }),
@@ -344,7 +287,8 @@ export default function ProjectDetailPage() {
         </Link>
       </div>);
     }
-    return (<div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
+    return (<div aria-busy={taskSaving} className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
+      {workspaceMessage && <p role="status" className="text-sm text-[var(--muted-foreground)]">{workspaceMessage}</p>}
       <Link to="/projects" className="inline-flex items-center gap-1.5 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors">
         <ArrowLeft className="h-4 w-4"/> Back to Projects
       </Link>
@@ -414,7 +358,7 @@ export default function ProjectDetailPage() {
                 <GitBranch className="h-4 w-4"/> Connect GitHub
               </Button>
             </a>)}
-          {workspaceMessage && <p className="text-xs text-[var(--muted-foreground)]">{workspaceMessage}</p>}
+
         </div>
 
         <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 flex flex-col justify-between gap-5">
@@ -442,7 +386,7 @@ export default function ProjectDetailPage() {
       {/* Kanban Board */}
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4 pt-2">
         <p className="text-xs text-[var(--muted-foreground)]">
-          Drag or switch task columns directly using the status dropdown on each card
+          Move tasks between columns using the status dropdown on each card
         </p>
 
         <div className="flex gap-4 overflow-x-auto pb-4 items-start scrollbar-none">
@@ -497,7 +441,7 @@ export default function ProjectDetailPage() {
 
                       <div className="pt-2 border-t border-[var(--border)] flex items-center justify-between" onClick={(e) => e.stopPropagation()}>
                         <span className="text-[10px] text-[var(--muted-foreground)] uppercase">Move:</span>
-                        <select value={task.status} onChange={(e) => handleTaskStatusChange(task.id, e.target.value)} className="text-[11px] bg-[var(--muted)] text-[var(--foreground)] border border-[var(--border)] rounded px-2 py-0.5 custom-select cursor-pointer">
+                        <select disabled={taskSaving} value={task.status} onChange={(e) => handleTaskStatusChange(task.id, e.target.value)} className="text-[11px] bg-[var(--muted)] text-[var(--foreground)] border border-[var(--border)] rounded px-2 py-0.5 custom-select cursor-pointer">
                           {KANBAN_COLUMNS.map((c) => (<option key={c.id} value={c.id}>
                               {c.title}
                             </option>))}
@@ -528,6 +472,7 @@ export default function ProjectDetailPage() {
                 </button>
               </div>
 
+              {workspaceMessage && <p role="alert" className="text-sm text-red-500">{workspaceMessage}</p>}
               <form onSubmit={handleCreateTask} className="space-y-4">
                 <div>
                   <Label className="text-xs font-semibold mb-1 block">Task Title *</Label>
@@ -571,7 +516,7 @@ export default function ProjectDetailPage() {
                   <Button type="button" variant="outline" onClick={() => setIsAddTaskOpen(false)}>
                     Cancel
                   </Button>
-                  <Button type="submit" className="gap-1 cursor-pointer">
+                  <Button disabled={taskSaving} type="submit" className="gap-1 cursor-pointer">
                     <Plus className="h-4 w-4"/> Create Task
                   </Button>
                 </div>
@@ -607,18 +552,19 @@ export default function ProjectDetailPage() {
 
               <div className="space-y-1.5">
                 <Label className="text-xs font-semibold">Change Task Column</Label>
-                <select value={selectedTaskForModal.status} onChange={(e) => handleTaskStatusChange(selectedTaskForModal.id, e.target.value)} className="w-full h-10 rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 text-xs custom-select">
+                <select disabled={taskSaving} value={selectedTaskForModal.status} onChange={(e) => handleTaskStatusChange(selectedTaskForModal.id, e.target.value)} className="w-full h-10 rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 text-xs custom-select">
                   {KANBAN_COLUMNS.map((c) => (<option key={c.id} value={c.id}>{c.title}</option>))}
                 </select>
               </div>
 
+              {workspaceMessage && <p role="alert" className="text-sm text-red-500">{workspaceMessage}</p>}
               {selectedTaskForModal.subtasks && selectedTaskForModal.subtasks.length > 0 && (<div className="space-y-2 pt-2 border-t border-[var(--border)]">
                   <p className="text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
                     Subtasks Checklist ({selectedTaskForModal.subtasks.filter((s) => s.completed).length}/{selectedTaskForModal.subtasks.length})
                   </p>
                   <div className="space-y-1.5">
                     {selectedTaskForModal.subtasks.map((st, idx) => (<label key={st.id || idx} className="flex items-center gap-2.5 p-2 rounded-lg hover:bg-[var(--muted)] cursor-pointer text-xs transition-colors">
-                        <input type="checkbox" checked={st.completed} onChange={() => handleToggleSubtask(selectedTaskForModal.id, idx)} className="h-4 w-4 rounded accent-[var(--primary)]"/>
+                        <input disabled={taskSaving} type="checkbox" checked={st.completed} onChange={() => handleToggleSubtask(selectedTaskForModal.id, idx)} className="h-4 w-4 rounded accent-[var(--primary)]"/>
                         <span className={st.completed ? "line-through text-[var(--muted-foreground)]" : "font-medium"}>
                           {st.title}
                         </span>
@@ -627,7 +573,7 @@ export default function ProjectDetailPage() {
                 </div>)}
 
               <div className="flex items-center justify-between pt-4 border-t border-[var(--border)]">
-                <Button variant="destructive" size="sm" onClick={() => handleDeleteTask(selectedTaskForModal.id)} className="gap-1.5 cursor-pointer text-xs">
+                <Button disabled={taskSaving} variant="destructive" size="sm" onClick={() => handleDeleteTask(selectedTaskForModal.id)} className="gap-1.5 cursor-pointer text-xs">
                   <Trash2 className="h-3.5 w-3.5"/> Delete Task
                 </Button>
                 <Button size="sm" onClick={() => setSelectedTaskForModal(null)} className="cursor-pointer text-xs">

@@ -1,3 +1,4 @@
+import { apiFetch, apiJson } from "@/lib/api";
 import { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
@@ -65,6 +66,7 @@ export default function SellPage() {
     const [isPublishing, setIsPublishing] = useState(false);
     const [isAiOptimizing, setIsAiOptimizing] = useState(false);
     const [aiSuccessMessage, setAiSuccessMessage] = useState(null);
+    const [draftId, setDraftId] = useState(null);
     const [publishedSuccess, setPublishedSuccess] = useState(false);
     const [errorMessage, setErrorMessage] = useState(null);
     const [stepErrors, setStepErrors] = useState({});
@@ -88,7 +90,7 @@ export default function SellPage() {
                 }
             }
             catch { }
-            fetch(`/api/projects/${pId}`)
+            apiFetch(`/api/projects/${pId}`)
                 .then((res) => (res.ok ? res.json() : null))
                 .then((proj) => {
                 if (proj && !proj.error) {
@@ -139,7 +141,7 @@ export default function SellPage() {
         setIsAiOptimizing(true);
         setAiSuccessMessage(null);
         try {
-            const res = await fetch("/api/ai", {
+            const res = await apiFetch("/api/ai", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -298,11 +300,19 @@ export default function SellPage() {
                 requirements: requirements ? requirements.split("\n").map((r) => r.trim()).filter(Boolean) : [],
                 projectId: projectId || undefined,
             };
-            const res = await addProduct(productPayload);
+            let saved;
+            if (draftId) {
+                const { projectId: ignored, ...updates } = productPayload;
+                saved = await apiJson(`/api/products/${draftId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(updates) });
+            } else {
+                saved = await apiJson("/api/products", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(productPayload) });
+                setDraftId(saved.id);
+            }
+            const res = await apiJson(`/api/products/${saved.id}/submit`, { method: "POST" });
             if (res) {
                 setPublishedSuccess(true);
                 setTimeout(() => {
-                    navigate("/marketplace");
+                    navigate("/my-products");
                 }, 1500);
             }
             else {
@@ -311,7 +321,7 @@ export default function SellPage() {
         }
         catch (error) {
             console.error("[SellPage] Failed to publish product:", error);
-            setErrorMessage("An unexpected error occurred while publishing. Please try again.");
+            setErrorMessage(error.message || "Could not submit product. Any saved draft is available in My Products.");
         }
         finally {
             setIsPublishing(false);
@@ -853,12 +863,12 @@ export default function SellPage() {
                 {publishedSuccess ? (<CheckCircle2 className="h-8 w-8 text-emerald-600 dark:text-emerald-400"/>) : (<Rocket className="h-8 w-8 text-emerald-600 dark:text-emerald-400"/>)}
               </div>
               <h2 className="text-2xl font-bold mb-2">
-                {publishedSuccess ? "Product Published Successfully! 🎉" : "Ready to publish?"}
+                {publishedSuccess ? "Product Submitted for Review" : "Ready to submit?"}
               </h2>
               <p className="text-[var(--muted-foreground)] mb-8 max-w-md mx-auto">
                 {publishedSuccess
-                ? "Your product is now live on the marketplace. Redirecting you..."
-                : "Your software will be published to the marketplace and available for students & clients to discover."}
+                ? "Your draft is saved and waiting for moderation. Redirecting to My Products..."
+                : "An administrator will review your listing before it appears in the marketplace."}
               </p>
 
               {errorMessage && (<div className="mb-6 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-500 text-sm max-w-md mx-auto">
@@ -871,9 +881,9 @@ export default function SellPage() {
                   </Button>
                   <Button size="lg" onClick={handlePublish} disabled={isPublishing} className="gap-2">
                     {isPublishing ? (<>
-                        <Loader2 className="h-4 w-4 animate-spin"/> Publishing...
+                        <Loader2 className="h-4 w-4 animate-spin"/> Submitting...
                       </>) : (<>
-                        <Rocket className="h-4 w-4"/> Publish Product
+                        <Rocket className="h-4 w-4"/> Submit for Review
                       </>)}
                   </Button>
                 </div>)}

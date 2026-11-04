@@ -1,3 +1,4 @@
+import { apiFetch } from "@/lib/api";
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
@@ -24,11 +25,11 @@ export function LandingPage() {
     const [solutionRequests, setSolutionRequests] = useState([]);
     const [students, setStudents] = useState([]);
     useEffect(() => {
-        fetch("/api/products")
+        apiFetch("/api/products")
             .then((res) => res.json())
             .then((data) => setProducts(data.products || []))
             .catch(() => setProducts([]));
-        fetch("/api/solutions")
+        apiFetch("/api/solutions")
             .then((res) => res.json())
             .then((data) => setSolutionRequests(data.requests || []))
             .catch(() => setSolutionRequests([]));
@@ -131,7 +132,7 @@ export function LandingPage() {
       </section>
 
       {/* ── How It Works ──────────────────────────────── */}
-      <section id="how-it-works" className="py-20 lg:py-28 bg-[var(--muted)]/50">
+      <section id="how-it-works" className="scroll-mt-20 py-20 lg:py-28 bg-[var(--muted)]/50">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <motion.div {...fadeUp} className="text-center mb-16">
             <Badge variant="secondary" className="mb-4">How It Works</Badge>
@@ -194,7 +195,7 @@ export function LandingPage() {
       </section>
 
       {/* ── Featured Software ─────────────────────────── */}
-      <section className="py-20 lg:py-28">
+      <section id="featured-software" className="scroll-mt-20 py-20 lg:py-28">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <motion.div {...fadeUp} className="flex items-end justify-between mb-10">
             <div>
@@ -233,7 +234,7 @@ export function LandingPage() {
                       <div className="flex items-center justify-between text-xs text-[var(--muted-foreground)]">
                         <div className="flex items-center gap-1">
                           <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400"/>
-                          <span className="font-medium text-[var(--foreground)]">{product.rating}</span>
+                          <span className="font-medium text-[var(--foreground)]">{product.reviewCount ? product.rating : "No reviews yet"}</span>
                         </div>
                         <span>{product.salesCount || 0} sales</span>
                       </div>
@@ -252,7 +253,7 @@ export function LandingPage() {
       </section>
 
       {/* ── New Opportunities ─────────────────────────── */}
-      <section className="py-20 lg:py-28 bg-[var(--muted)]/50">
+      <section id="solution-requests" className="scroll-mt-20 py-20 lg:py-28 bg-[var(--muted)]/50">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <motion.div {...fadeUp} className="flex items-end justify-between mb-10">
             <div>
@@ -332,7 +333,7 @@ export function LandingPage() {
       </section>
 
       {/* ── Features ──────────────────────────────────── */}
-      <section className="py-20 lg:py-28">
+      <section id="why-campuscode" className="scroll-mt-20 py-20 lg:py-28">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <motion.div {...fadeUp} className="text-center mb-12">
             <Badge variant="secondary" className="mb-3">Why CampusCode</Badge>

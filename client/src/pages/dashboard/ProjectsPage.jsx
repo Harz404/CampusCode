@@ -14,24 +14,30 @@ export default function ProjectsPage() {
     const [description, setDescription] = useState("");
     const [category, setCategory] = useState("Full-Stack");
     const [techInput, setTechInput] = useState("");
-    const handleCreate = (e) => {
+    const [createError, setCreateError] = useState("");
+    const [creating, setCreating] = useState(false);
+    const handleCreate = async (e) => {
         e.preventDefault();
         if (!name.trim())
             return;
-        addProject({
+        if (creating) return;
+        setCreating(true);
+        setCreateError("");
+        const created = await addProject({
             name,
             description,
             category,
             technologies: techInput ? techInput.split(",").map((t) => t.trim()) : ["React", "TypeScript"],
-            status: "active",
-            progress: 10,
         });
+        setCreating(false);
+        if (!created) { setCreateError("Could not create the project. Your input has been kept; please try again."); return; }
         setName("");
         setDescription("");
         setTechInput("");
         setIsModalOpen(false);
     };
     return (<div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
+      {createError && <p role="alert" className="text-red-500 mb-4">{createError}</p>}
       {/* Header */}
       <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="flex items-start justify-between gap-4 mb-8 flex-wrap">
         <div>
@@ -135,6 +141,7 @@ export default function ProjectsPage() {
                 <X className="h-5 w-5"/>
               </button>
             </div>
+            {createError && <p role="alert" className="text-sm text-red-500">{createError}</p>}
             <form onSubmit={handleCreate} className="space-y-4">
               <div>
                 <label className="text-xs font-medium block mb-1">
@@ -166,7 +173,7 @@ export default function ProjectsPage() {
                 <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)}>
                   Cancel
                 </Button>
-                <Button type="submit">
+                <Button disabled={creating} type="submit">
                   Create Project
                 </Button>
               </div>
