@@ -10,7 +10,8 @@ A production-quality student-focused software marketplace and project-management
 
 | Layer | Technology |
 |---|---|
-| **Frontend** | React 18 SPA, Vite, React Router v6, Tailwind CSS v4, Framer Motion, Lucide React, Recharts |
+| **Frontend** | React 18 SPA with JavaScript/JSX, React Router v6, Tailwind CSS v4, Framer Motion, Lucide React, Recharts |
+| **Build tools** | esbuild (React bundling), PostCSS (Tailwind CSS compilation) |
 | **Backend** | Node.js, Express.js, TypeScript (ESM) |
 | **Database** | MongoDB with Mongoose ODM (MongoDB Atlas) |
 | **Authentication** | JWT (JSON Web Tokens) with bcryptjs password hashing |
@@ -23,15 +24,14 @@ A production-quality student-focused software marketplace and project-management
 
 ```
 CampusCode/
-├── client/                   # React Single-Page Application (Vite)
+├── client/                   # React Single-Page Application
 │   ├── index.html
-│   ├── vite.config.ts        # Vite config with API proxy to port 5000
+│   ├── scripts/build.mjs     # React/CSS build and development watch mode
 │   ├── package.json          # Frontend dependencies & scripts
-│   ├── tsconfig.json
+│   ├── jsconfig.json         # JavaScript editor settings & @/ import alias
 │   ├── src/
-│   │   ├── main.tsx          # React DOM entrypoint & Providers
-│   │   ├── App.tsx           # React Router v6 routing table
-│   │   ├── types/            # Shared TypeScript domain models & DTOs
+│   │   ├── main.jsx          # React DOM entrypoint & Providers
+│   │   ├── App.jsx           # React Router v6 routing table
 │   │   ├── context/          # AuthContext, ThemeContext, Notifications
 │   │   ├── components/       # Primitives, Navbar, Footer, DashboardLayout
 │   │   └── pages/            # Public, Auth, Dashboard, and Admin views
@@ -56,7 +56,9 @@ CampusCode/
 
 ## 🚀 Running the Project
 
-Run the backend and frontend in separate terminal windows:
+Use Node.js 20 or newer. Install dependencies in both `client` and `server` with `npm install`. Copy `server/.env.example` to `server/.env` if it does not exist, then configure your MongoDB connection and JWT secret.
+
+Express serves the frontend and API together at port 5000. Run the server and frontend builder in separate terminal windows:
 
 ### Terminal 1: Backend Server (Port 5000)
 ```bash
@@ -64,13 +66,15 @@ cd server
 npm run dev
 ```
 
-### Terminal 2: Frontend Client (Port 5173)
+### Terminal 2: Frontend Builder (Watch Mode)
 ```bash
 cd client
 npm run dev
 ```
 
-Visit [http://localhost:5173](http://localhost:5173) in your browser.
+After the first frontend build finishes, visit [http://localhost:5000](http://localhost:5000). The builder watches frontend source, styles, HTML, and optional `client/public` assets. Refresh the browser after changes; hot module replacement is not enabled.
+
+API requests use the same origin, so a separate frontend server or API proxy is unnecessary. If you change `PORT`, update `CLIENT_URL` in `server/.env` to match.
 
 ---
 
@@ -82,7 +86,14 @@ cd server && npm run build
 
 # Build frontend
 cd ../client && npm run build
+
+# Start Express (serves the API and client/dist)
+cd ../server && npm start
 ```
+
+Set `NODE_ENV=production` in the deployment environment. Deploy both `server/dist` and `client/dist` with the same directory structure. Build tools are only used to generate the frontend files; Express serves the resulting JavaScript and CSS.
+
+After building both directories, verify frontend serving from `server` with `node --test tests/client.test.mjs`.
 
 ---
 

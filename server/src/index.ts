@@ -6,6 +6,7 @@ import cors from "cors";
 import path from "path";
 import { fileURLToPath } from "url";
 import { connectDB, isDbConnected } from "./config/db.js";
+import { serveClient } from "./client.js";
 
 // Import Routes
 import authRoutes from "./routes/authRoutes.js";
@@ -30,7 +31,7 @@ const PORT = process.env.PORT || 5000;
 // Middleware
 app.use(
   cors({
-    origin: process.env.CLIENT_URL || "http://localhost:5173",
+    origin: process.env.CLIENT_URL || `http://localhost:${PORT}`,
     credentials: true,
   })
 );
@@ -59,6 +60,9 @@ app.use("/api/notifications", notificationRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/ai", aiRoutes);
 app.use("/api/admin", adminRoutes);
+
+// Express serves both the React app and the API on the same port.
+serveClient(app);
 
 // Global Error Handler
 app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
